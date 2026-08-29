@@ -1,0 +1,68 @@
+name: iOS Simulator Build
+
+on:
+  push:
+    branches:
+      - main
+      - agent/ios-navigation-shell
+  pull_request:
+
+concurrency:
+  group: ios-simulator-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator-build:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate navigation contract
+        run: node scripts/test-navigation-contract.mjs
+
+      - name: Build unsigned iOS Simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/build/ios"
+          cd "$GITHUB_WORKSPACE/Stemist.swiftpm"
+          xcodebuild \
+            -scheme Stemist \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/ios" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
+            INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
+            INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
+            build 2>&1 | tee "$GITHUB_WORKSPACE/build/ios/xcodebuild.log"
+
+      - name: Verify app metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find "$GITHUB_WORKSPACE/build/ios/Build/Products" -type d -name '*.app' -print -quit)"
+          test -n "$APP_PATH"
+          PLIST="$APP_PATH/Info.plist"
+          test -f "$PLIST"
+          for key in NSMicrophoneUsageDescription NSCameraUsageDescription NSPhotoLibraryUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$PLIST" >/dev/null
+          done
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")" = "stemist"
+
+      - name: Upload simulator build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: stemist-ios-simulator
+          path: |
+            build/ios/Build/Products/Debug-iphonesimulator/*.app
+            build/ios/xcodebuild.log

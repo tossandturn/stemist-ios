@@ -10,7 +10,7 @@ import AppleProductTypes
 let package = Package(
     name: "Stemist",
     platforms: [
-        .iOS("18.6")
+        .iOS("17.0")
     ],
     products: [
         .iOSApplication(
@@ -40,7 +40,8 @@ let package = Package(
                 .photoLibrary(
                     purposeString: "Choose handwritten work and source files from your photo library."
                 )
-            ]
+            ],
+            additionalInfoPlistContentFilePath: "Info.plist"
         )
     ],
     targets: [

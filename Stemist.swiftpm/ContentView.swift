@@ -17,6 +17,12 @@ struct ContentView: View {
         self.configuration = configuration
     }
 
+    private func normalizeSelectedTab() {
+        if !configuration.showsAccountEntry && selectedTab == .profile {
+            selectedTab = .today
+        }
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             DashboardView(selectedTab: $selectedTab)
@@ -74,6 +80,12 @@ struct ContentView: View {
         }
         .onOpenURL { url in
             deepLinkedRoute = WebRoute(url: url)
+        }
+        .onAppear {
+            normalizeSelectedTab()
+        }
+        .onChange(of: selectedTab) { _, _ in
+            normalizeSelectedTab()
         }
         .accessibilityIdentifier("stemist-root")
     }
@@ -461,9 +473,14 @@ enum WebRoute: Hashable, Identifiable {
 
         let expectedItems = expected.queryItems ?? []
         let incomingItems = incoming.queryItems ?? []
-        guard !expectedItems.isEmpty else { return incomingItems.isEmpty }
+        return matchesQueryItems(expectedItems, in: incomingItems)
+    }
 
-        return expectedItems.allSatisfy { expectedItem in
+    private func matchesQueryItems(
+        _ expectedItems: [URLQueryItem],
+        in incomingItems: [URLQueryItem]
+    ) -> Bool {
+        expectedItems.allSatisfy { expectedItem in
             incomingItems.contains { incomingItem in
                 incomingItem.name == expectedItem.name && incomingItem.value == expectedItem.value
             }
@@ -565,11 +582,11 @@ enum WebRoute: Hashable, Identifiable {
         case .stemHome:
             URL(string: "https://stem.ieltsist.com/today")!
         case .stemIG:
-            URL(string: "https://stem.ieltsist.com/practice?stage=IGCSE&tab=recommended")!
+            URL(string: "https://stem.ieltsist.com/practice?routeId=cie-0625-igcse-physics&stage=IGCSE&course=0625&tab=recommended")!
         case .stemAS:
-            URL(string: "https://stem.ieltsist.com/practice?stage=AS&tab=recommended")!
+            URL(string: "https://stem.ieltsist.com/practice?routeId=cie-9702-as-physics&stage=AS&course=9702&tab=recommended")!
         case .stemA2:
-            URL(string: "https://stem.ieltsist.com/practice?stage=A2&tab=recommended")!
+            URL(string: "https://stem.ieltsist.com/practice?routeId=cie-9702-a2-physics&stage=A2&course=9702&tab=recommended")!
         case .stemTopics:
             URL(string: "https://stem.ieltsist.com/practice?tab=topics")!
         case .stemPastPapers:
@@ -579,7 +596,7 @@ enum WebRoute: Hashable, Identifiable {
         case .stemCoach:
             URL(string: "https://stem.ieltsist.com/today?coach=1")!
         case .aiCoach:
-            URL(string: "https://ai.ieltsist.com/")!
+            URL(string: "https://ieltsist.com/#ai-coach")!
         }
     }
 }

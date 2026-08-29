@@ -37,6 +37,7 @@ workflows:
           for key in NSMicrophoneUsageDescription NSCameraUsageDescription NSPhotoLibraryUsageDescription; do
             /usr/libexec/PlistBuddy -c "Print :$key" "$PLIST" >/dev/null
           done
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")" = "stemist"
           echo "Verified privacy usage descriptions in $PLIST"
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app

@@ -20,7 +20,7 @@ The full-function route matrix is:
 
 - IELTS: Listening, Reading, Writing upload, Speaking microphone flow, Vocabulary, and Account.
 - STEM: Today, IG, AS, A2, Topics, Past papers, Notebook, and STEM Coach.
-- Shared AI: the AI Coach page, persistent WebKit cookies, same-session navigation, and safe external-link handling.
+- Shared AI: the IELTSist AI Coach chat surface (`https://ieltsist.com/#ai-coach`), persistent WebKit cookies, same-session navigation, and safe external-link handling. The `ai.ieltsist.com` API console is a server-side operations surface and is not presented as the student chat.
 
 For each route, verify loading, back/forward, reload, iPad portrait and landscape layout, keyboard focus, Apple Pencil/canvas input where the web surface supports it, upload cancellation and success, media permission prompts, autosave/restore, submit/result states, and a recoverable network or web-content-process failure. Use a test account and test data only.
 
@@ -32,6 +32,8 @@ For each route, verify loading, back/forward, reload, iPad portrait and landscap
 4. Add Apple Developer signing and TestFlight publishing only after the native bundle identifier and App Store Connect record are ready.
 
 The Windows checkout cannot compile Swift locally. A successful Codemagic `xcodebuild` step and its generated app metadata check are required before treating the iOS package as buildable.
+
+The package deployment target is iPadOS/iOS 17.0 or newer. The native shell keeps the account tab hidden in student mode, while the existing web authentication remains available inside product flows.
 
 ## Local contract check
 

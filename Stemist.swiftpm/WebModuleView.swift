@@ -44,18 +44,28 @@ enum ExternalWebPolicy {
 
     static func canKeepAuthenticationRedirect(
         _ url: URL,
-        from sourceURL: URL?,
-        navigationType: WKNavigationType
+        from sourceURL: URL?
     ) -> Bool {
-        guard navigationType == .other,
-              let sourceURL,
-              ProductWebPolicy.isAllowed(sourceURL),
+        guard let sourceURL,
+              (ProductWebPolicy.isAllowed(sourceURL) || isAllowedAuthenticationHost(sourceURL)),
               url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased() else {
             return false
         }
 
-        return authenticationRedirectHosts.contains(host)
+        return isAllowedAuthenticationHost(host)
+    }
+
+    private static func isAllowedAuthenticationHost(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased() else {
+            return false
+        }
+        return isAllowedAuthenticationHost(host)
+    }
+
+    private static func isAllowedAuthenticationHost(_ host: String) -> Bool {
+        authenticationRedirectHosts.contains(host)
             || host == "auth.ieltsist.com"
             || host.hasSuffix(".auth.ieltsist.com")
     }
@@ -214,9 +224,20 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.scrollView.alwaysBounceVertical = true
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.keyboardDismissMode = .interactive
+        configureInputGestures(for: webView)
         store.webView = webView
         context.coordinator.load(url, in: webView)
         return webView
+    }
+
+    private func configureInputGestures(for webView: WKWebView) {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+
+        // Keep finger and pointer scrolling, while leaving stylus touches for web canvases.
+        webView.scrollView.panGestureRecognizer.allowedTouchTypes = [
+            NSNumber(value: UITouch.TouchType.direct.rawValue),
+            NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
+        ]
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
@@ -438,11 +459,7 @@ struct EmbeddedWebView: UIViewRepresentable {
                 return
             }
 
-            if ExternalWebPolicy.canKeepAuthenticationRedirect(
-                targetURL,
-                from: webView.url,
-                navigationType: navigationAction.navigationType
-            ) {
+            if ExternalWebPolicy.canKeepAuthenticationRedirect(targetURL, from: webView.url) {
                 decisionHandler(.allow)
                 return
             }
