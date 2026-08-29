@@ -6,6 +6,10 @@ workflows:
     environment:
       xcode: latest
     scripts:
+      - name: Validate iOS navigation contract
+        script: |
+          set -euo pipefail
+          node scripts/test-navigation-contract.mjs
       - name: Build the Swift Playground package for iOS Simulator
         script: |
           set -euo pipefail

@@ -4,31 +4,63 @@ import UIKit
 import WebKit
 import SafariServices
 
+final class WebViewStore: ObservableObject {
+    weak var webView: WKWebView?
+
+    func goBack() {
+        webView?.goBack()
+    }
+
+    func goForward() {
+        webView?.goForward()
+    }
+
+    func reload() {
+        webView?.reload()
+    }
+}
+
+enum ProductWebPolicy {
+    static func isAllowed(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https" else { return false }
+        let host = (url.host ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return host == "ieltsist.com" || host.hasSuffix(".ieltsist.com")
+    }
+}
+
+enum WebViewEnvironment {
+    static let processPool = WKProcessPool()
+}
+
 struct WebModuleView: View {
     @Environment(\.dismiss) private var dismiss
-    let destination: WebDestination
+    let route: WebRoute
+    @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var canGoBack = false
     @State private var canGoForward = false
     @State private var reloadToken = UUID()
+    @State private var currentURL: URL?
     @State private var showsSafari = false
 
     var body: some View {
         NavigationStack {
             ZStack {
                 EmbeddedWebView(
-                    url: destination.url,
+                    url: route.url,
                     reloadToken: reloadToken,
+                    store: webViewStore,
                     isLoading: $isLoading,
                     loadError: $loadError,
                     canGoBack: $canGoBack,
-                    canGoForward: $canGoForward
+                    canGoForward: $canGoForward,
+                    currentURL: $currentURL
                 )
 
                 if let loadError {
                     ContentUnavailableView {
-                        Label("Unable to load \(destination.title)", systemImage: "wifi.exclamationmark")
+                        Label("Unable to load \(route.title)", systemImage: "wifi.exclamationmark")
                     } description: {
                         Text(loadError)
                     } actions: {
@@ -52,7 +84,7 @@ struct WebModuleView: View {
             .overlay(alignment: .bottom) {
                 HStack(spacing: 18) {
                     Button {
-                        NotificationCenter.default.post(name: .stemistWebGoBack, object: nil)
+                        webViewStore.goBack()
                     } label: {
                         Image(systemName: "chevron.backward")
                     }
@@ -60,7 +92,7 @@ struct WebModuleView: View {
                     .accessibilityLabel("Back")
 
                     Button {
-                        NotificationCenter.default.post(name: .stemistWebGoForward, object: nil)
+                        webViewStore.goForward()
                     } label: {
                         Image(systemName: "chevron.forward")
                     }
@@ -83,14 +115,14 @@ struct WebModuleView: View {
                     } label: {
                         Image(systemName: "safari")
                     }
-                    .accessibilityLabel("Open in Safari")
+                    .accessibilityLabel("Open current page in Safari")
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 .background(.bar)
             }
             .ignoresSafeArea(edges: .bottom)
-            .navigationTitle(destination.title)
+            .navigationTitle(route.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -99,11 +131,11 @@ struct WebModuleView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .accessibilityLabel("Close \(destination.title)")
+                    .accessibilityLabel("Close \(route.title)")
                 }
             }
             .sheet(isPresented: $showsSafari) {
-                SafariView(url: destination.url)
+                SafariView(url: currentURL ?? route.url)
                     .ignoresSafeArea()
             }
         }
@@ -113,13 +145,16 @@ struct WebModuleView: View {
 struct EmbeddedWebView: UIViewRepresentable {
     let url: URL
     let reloadToken: UUID
+    let store: WebViewStore
     @Binding var isLoading: Bool
     @Binding var loadError: String?
     @Binding var canGoBack: Bool
     @Binding var canGoForward: Bool
+    @Binding var currentURL: URL?
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.processPool = WebViewEnvironment.processPool
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -128,47 +163,51 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.backgroundColor = .systemBackground
         webView.navigationDelegate = context.coordinator
         webView.allowsLinkPreview = false
+        webView.scrollView.keyboardDismissMode = .interactive
+        store.webView = webView
         context.coordinator.load(url, in: webView)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.store = store
         context.coordinator.updateNavigationState(webView)
-        guard context.coordinator.lastLoadedURL != url else { return }
+        guard context.coordinator.requestedURL != url else { return }
         context.coordinator.load(url, in: webView)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+        Coordinator(parent: self, store: store)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: EmbeddedWebView
-        var lastLoadedURL: URL?
+        var store: WebViewStore
+        var requestedURL: URL?
         var lastReloadToken: UUID?
-        weak var hostedWebView: WKWebView?
 
-        init(parent: EmbeddedWebView) {
+        init(parent: EmbeddedWebView, store: WebViewStore) {
             self.parent = parent
+            self.store = store
             super.init()
-            NotificationCenter.default.addObserver(self, selector: #selector(goBack), name: .stemistWebGoBack, object: nil)
-            NotificationCenter.default.addObserver(self, selector: #selector(goForward), name: .stemistWebGoForward, object: nil)
         }
 
         func load(_ url: URL, in webView: WKWebView) {
-            self.hostedWebView = webView
-            lastLoadedURL = url
+            requestedURL = url
             lastReloadToken = parent.reloadToken
             parent.isLoading = true
             parent.loadError = nil
+            parent.currentURL = url
+            store.webView = webView
             webView.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy))
         }
 
         func updateNavigationState(_ webView: WKWebView) {
-            self.hostedWebView = webView
+            store.webView = webView
             parent.canGoBack = webView.canGoBack
             parent.canGoForward = webView.canGoForward
+            parent.currentURL = webView.url ?? parent.currentURL
             guard lastReloadToken != parent.reloadToken else { return }
             lastReloadToken = parent.reloadToken
             parent.isLoading = true
@@ -179,6 +218,10 @@ struct EmbeddedWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             parent.isLoading = true
             parent.loadError = nil
+            updateNavigationState(webView)
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             updateNavigationState(webView)
         }
 
@@ -208,28 +251,19 @@ struct EmbeddedWebView: UIViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
-            // Keep product pages in the app. External destinations open in Safari
-            // so authentication and payment providers retain their supported flow.
-            if (targetURL.scheme == "https" || targetURL.scheme == "http") && targetURL.host == parent.url.host {
-                decisionHandler(.allow)
-            } else {
-                UIApplication.shared.open(targetURL)
-                decisionHandler(.cancel)
+
+            if ProductWebPolicy.isAllowed(targetURL) {
+                if navigationAction.targetFrame == nil {
+                    webView.load(navigationAction.request)
+                    decisionHandler(.cancel)
+                } else {
+                    decisionHandler(.allow)
+                }
+                return
             }
-        }
 
-        @objc private func goBack() {
-            guard let hostedWebView, hostedWebView.canGoBack else { return }
-            hostedWebView.goBack()
-        }
-
-        @objc private func goForward() {
-            guard let hostedWebView, hostedWebView.canGoForward else { return }
-            hostedWebView.goForward()
-        }
-
-        deinit {
-            NotificationCenter.default.removeObserver(self)
+            UIApplication.shared.open(targetURL, options: [:])
+            decisionHandler(.cancel)
         }
     }
 }
@@ -242,9 +276,4 @@ struct SafariView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
-}
-
-extension Notification.Name {
-    static let stemistWebGoBack = Notification.Name("stemistWebGoBack")
-    static let stemistWebGoForward = Notification.Name("stemistWebGoForward")
 }

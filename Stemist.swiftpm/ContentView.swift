@@ -19,18 +19,29 @@ struct ContentView: View {
 
             ModuleHomeView(
                 title: "IELTS",
-                subtitle: "Exam practice",
-                modules: ["Listening", "Reading", "Writing", "Speaking", "Vocabulary"],
-                destination: .ielts
+                subtitle: "Choose a skill and continue in the same IELTSist account.",
+                routes: [
+                    .ieltsListening,
+                    .ieltsReading,
+                    .ieltsWriting,
+                    .ieltsSpeaking,
+                    .ieltsVocabulary,
+                ]
             )
             .tabItem { Label("IELTS", systemImage: "text.book.closed") }
             .tag(AppTab.ielts)
 
             ModuleHomeView(
                 title: "STEM",
-                subtitle: "A-Level study",
-                modules: ["IG", "AS", "A2", "Topics", "Past papers"],
-                destination: .stem
+                subtitle: "Open a separate IG, AS, A2 or exam practice route.",
+                routes: [
+                    .stemIG,
+                    .stemAS,
+                    .stemA2,
+                    .stemTopics,
+                    .stemPastPapers,
+                    .stemNotebook,
+                ]
             )
             .tabItem { Label("STEM", systemImage: "atom") }
             .tag(AppTab.stem)
@@ -49,6 +60,7 @@ struct ContentView: View {
 
 private struct DashboardView: View {
     @Binding var selectedTab: AppTab
+    @State private var selectedRoute: WebRoute?
 
     var body: some View {
         NavigationStack {
@@ -56,7 +68,7 @@ private struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Today")
-                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .font(.largeTitle.weight(.bold))
                         Text("Choose where to continue your study.")
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -83,6 +95,15 @@ private struct DashboardView: View {
                             tint: StemistTheme.stem
                         ) {
                             selectedTab = .stem
+                        }
+
+                        LearningSpaceButton(
+                            title: "AI Coach",
+                            subtitle: "Get contextual help across both products",
+                            icon: "sparkles",
+                            tint: StemistTheme.brand
+                        ) {
+                            selectedRoute = .aiCoach
                         }
                     }
 
@@ -119,6 +140,9 @@ private struct DashboardView: View {
             }
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $selectedRoute) { route in
+                WebModuleView(route: route)
+            }
         }
     }
 }
@@ -171,9 +195,8 @@ private struct LearningSpaceButton: View {
 private struct ModuleHomeView: View {
     let title: String
     let subtitle: String
-    let modules: [String]
-    let destination: WebDestination
-    @State private var showsWebModule = false
+    let routes: [WebRoute]
+    @State private var selectedRoute: WebRoute?
 
     var body: some View {
         NavigationStack {
@@ -181,8 +204,9 @@ private struct ModuleHomeView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(title)
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .font(.largeTitle.weight(.bold))
                         Text(subtitle)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 10)
@@ -191,25 +215,31 @@ private struct ModuleHomeView: View {
                 }
 
                 Section {
-                    ForEach(modules, id: \.self) { module in
+                    ForEach(routes) { route in
                         Button {
-                            showsWebModule = true
+                            selectedRoute = route
                         } label: {
                             HStack(spacing: 14) {
-                                Image(systemName: destination.symbol)
-                                    .foregroundStyle(destination.tint)
+                                Image(systemName: route.symbol)
+                                    .foregroundStyle(route.tint)
                                     .frame(width: 28, height: 28)
-                                Text(module)
-                                    .foregroundStyle(.primary)
-                                Spacer()
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(route.title)
+                                        .foregroundStyle(.primary)
+                                    Text(route.subtitle)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 8)
                                 Image(systemName: "arrow.up.right")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.tertiary)
                             }
-                            .frame(minHeight: 44)
+                            .frame(minHeight: 52)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Open \(module)")
+                        .accessibilityLabel("Open \(route.title)")
                     }
                 } header: {
                     Text("Study")
@@ -219,28 +249,29 @@ private struct ModuleHomeView: View {
             .scrollContentBackground(.hidden)
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showsWebModule) {
-                WebModuleView(destination: destination)
+            .sheet(item: $selectedRoute) { route in
+                WebModuleView(route: route)
             }
         }
     }
 }
 
 private struct NotebookView: View {
-    @State private var showsStemNotebook = false
+    @State private var selectedRoute: WebRoute?
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Notebook")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .font(.largeTitle.weight(.bold))
                     Text("Your STEM workspace")
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
 
                 Button {
-                    showsStemNotebook = true
+                    selectedRoute = .stemNotebook
                 } label: {
                     Label("Open STEM notebook", systemImage: "square.and.pencil")
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -253,22 +284,22 @@ private struct NotebookView: View {
             .frame(maxWidth: 760, maxHeight: .infinity, alignment: .topLeading)
             .padding(20)
             .background(StemistTheme.background)
-            .sheet(isPresented: $showsStemNotebook) {
-                WebModuleView(destination: .stem)
+            .sheet(item: $selectedRoute) { route in
+                WebModuleView(route: route)
             }
         }
     }
 }
 
 private struct ProfileView: View {
-    @State private var showsAccount = false
+    @State private var selectedRoute: WebRoute?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     Button {
-                        showsAccount = true
+                        selectedRoute = .ieltsAccount
                     } label: {
                         Label("Open account", systemImage: "person.crop.circle")
                             .frame(minHeight: 44)
@@ -279,35 +310,23 @@ private struct ProfileView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Profile")
-            .sheet(isPresented: $showsAccount) {
-                WebModuleView(destination: .ielts)
+            .sheet(item: $selectedRoute) { route in
+                WebModuleView(route: route)
             }
         }
     }
 }
 
-enum WebDestination {
+enum WebDestination: Hashable {
     case ielts
     case stem
-
-    var title: String {
-        switch self {
-        case .ielts: "IELTSist"
-        case .stem: "STEM"
-        }
-    }
-
-    var url: URL {
-        switch self {
-        case .ielts: URL(string: "https://ieltsist.com")!
-        case .stem: URL(string: "https://stem.ieltsist.com")!
-        }
-    }
+    case ai
 
     var symbol: String {
         switch self {
         case .ielts: "text.book.closed"
         case .stem: "atom"
+        case .ai: "sparkles"
         }
     }
 
@@ -315,6 +334,134 @@ enum WebDestination {
         switch self {
         case .ielts: StemistTheme.ielts
         case .stem: StemistTheme.stem
+        case .ai: StemistTheme.brand
+        }
+    }
+}
+
+enum WebRoute: Hashable, Identifiable {
+    case ieltsListening
+    case ieltsReading
+    case ieltsWriting
+    case ieltsSpeaking
+    case ieltsVocabulary
+    case ieltsAccount
+    case stemHome
+    case stemIG
+    case stemAS
+    case stemA2
+    case stemTopics
+    case stemPastPapers
+    case stemNotebook
+    case stemCoach
+    case aiCoach
+
+    var id: String {
+        switch self {
+        case .ieltsListening: "ielts-listening"
+        case .ieltsReading: "ielts-reading"
+        case .ieltsWriting: "ielts-writing"
+        case .ieltsSpeaking: "ielts-speaking"
+        case .ieltsVocabulary: "ielts-vocabulary"
+        case .ieltsAccount: "ielts-account"
+        case .stemHome: "stem-home"
+        case .stemIG: "stem-ig"
+        case .stemAS: "stem-as"
+        case .stemA2: "stem-a2"
+        case .stemTopics: "stem-topics"
+        case .stemPastPapers: "stem-past-papers"
+        case .stemNotebook: "stem-notebook"
+        case .stemCoach: "stem-coach"
+        case .aiCoach: "ai-coach"
+        }
+    }
+
+    var destination: WebDestination {
+        switch self {
+        case .ieltsListening, .ieltsReading, .ieltsWriting, .ieltsSpeaking, .ieltsVocabulary, .ieltsAccount:
+            .ielts
+        case .stemHome, .stemIG, .stemAS, .stemA2, .stemTopics, .stemPastPapers, .stemNotebook, .stemCoach:
+            .stem
+        case .aiCoach:
+            .ai
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .ieltsListening: "Listening"
+        case .ieltsReading: "Reading"
+        case .ieltsWriting: "Writing"
+        case .ieltsSpeaking: "Speaking"
+        case .ieltsVocabulary: "Vocabulary"
+        case .ieltsAccount: "IELTSist account"
+        case .stemHome: "STEM Today"
+        case .stemIG: "IG course"
+        case .stemAS: "AS course"
+        case .stemA2: "A2 course"
+        case .stemTopics: "Topic practice"
+        case .stemPastPapers: "Past papers"
+        case .stemNotebook: "STEM notebook"
+        case .stemCoach: "STEM AI Coach"
+        case .aiCoach: "AI Coach"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .ieltsListening: "Practice sections with captions and review."
+        case .ieltsReading: "Work through passages and evidence."
+        case .ieltsWriting: "Write, submit and receive feedback."
+        case .ieltsSpeaking: "Practise Parts 1, 2 and 3 with AI."
+        case .ieltsVocabulary: "Review IELTS and STEM terminology."
+        case .ieltsAccount: "Membership, drafts and saved work."
+        case .stemHome: "Your cross-subject study dashboard."
+        case .stemIG: "IGCSE route and practice inventory."
+        case .stemAS: "AS route and paper components."
+        case .stemA2: "A2 route and paper components."
+        case .stemTopics: "Topic-based practice in the selected route."
+        case .stemPastPapers: "Verified question papers and source evidence."
+        case .stemNotebook: "Private notes and review queue."
+        case .stemCoach: "Contextual help for the current STEM task."
+        case .aiCoach: "Unified AI conversation workspace."
+        }
+    }
+
+    var symbol: String { destination.symbol }
+    var tint: Color { destination.tint }
+
+    var url: URL {
+        switch self {
+        case .ieltsListening:
+            URL(string: "https://ieltsist.com/?module=listening#single")!
+        case .ieltsReading:
+            URL(string: "https://ieltsist.com/?module=reading#single")!
+        case .ieltsWriting:
+            URL(string: "https://ieltsist.com/?module=writing#writing-upload")!
+        case .ieltsSpeaking:
+            URL(string: "https://ieltsist.com/?module=speaking#bank")!
+        case .ieltsVocabulary:
+            URL(string: "https://ieltsist.com/#vocabulary")!
+        case .ieltsAccount:
+            URL(string: "https://ieltsist.com/#mine")!
+        case .stemHome:
+            URL(string: "https://stem.ieltsist.com/today")!
+        case .stemIG:
+            URL(string: "https://stem.ieltsist.com/practice?stage=IGCSE&tab=recommended")!
+        case .stemAS:
+            URL(string: "https://stem.ieltsist.com/practice?stage=AS&tab=recommended")!
+        case .stemA2:
+            URL(string: "https://stem.ieltsist.com/practice?stage=A2&tab=recommended")!
+        case .stemTopics:
+            URL(string: "https://stem.ieltsist.com/practice?tab=topics")!
+        case .stemPastPapers:
+            URL(string: "https://stem.ieltsist.com/papers")!
+        case .stemNotebook:
+            URL(string: "https://stem.ieltsist.com/notebook")!
+        case .stemCoach:
+            URL(string: "https://stem.ieltsist.com/today?coach=1")!
+        case .aiCoach:
+            URL(string: "https://ai.ieltsist.com/")!
         }
     }
 }
