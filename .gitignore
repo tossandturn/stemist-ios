@@ -60,3 +60,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Finder metadata emitted when an iPad archive is unpacked on Windows.
+__MACOSX/
