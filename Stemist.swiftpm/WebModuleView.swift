@@ -101,11 +101,11 @@ struct WebModuleView: View {
                     currentURL: $currentURL
                 )
 
-                if let loadError {
+                if let errorMessage = loadError {
                     ContentUnavailableView {
                         Label("Unable to load \(route.title)", systemImage: "wifi.exclamationmark")
                     } description: {
-                        Text(loadError)
+                        Text(errorMessage)
                     } actions: {
                         Button("Try again", systemImage: "arrow.clockwise") {
                             loadError = nil

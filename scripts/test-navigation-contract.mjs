@@ -100,6 +100,11 @@ assert.doesNotMatch(
 )
 
 assert.match(webModule, /final class WebViewStore/, 'WebView navigation must be instance scoped')
+assert.doesNotMatch(
+  webModule,
+  /if\s+let\s+loadError\s*\{/,
+  'the load-error view must not shadow the @State loadError binding'
+)
 assert.match(webModule, /processPool\s*=/, 'all product pages must share a WKProcessPool for SSO')
 assert.match(webModule, /hasSuffix\("\.ieltsist\.com"\)/, 'product subdomains must stay in the app')
 assert.match(webModule, /navigationAction\.targetFrame\s*==\s*nil/, 'target blank links need an in-app policy')
