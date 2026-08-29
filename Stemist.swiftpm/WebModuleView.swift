@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import UIKit
 import WebKit
@@ -146,7 +147,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         var parent: EmbeddedWebView
         var lastLoadedURL: URL?
         var lastReloadToken: UUID?
-        weak var webView: WKWebView?
+        weak var hostedWebView: WKWebView?
 
         init(parent: EmbeddedWebView) {
             self.parent = parent
@@ -156,7 +157,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         }
 
         func load(_ url: URL, in webView: WKWebView) {
-            self.webView = webView
+            self.hostedWebView = webView
             lastLoadedURL = url
             lastReloadToken = parent.reloadToken
             parent.isLoading = true
@@ -165,7 +166,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         }
 
         func updateNavigationState(_ webView: WKWebView) {
-            self.webView = webView
+            self.hostedWebView = webView
             parent.canGoBack = webView.canGoBack
             parent.canGoForward = webView.canGoForward
             guard lastReloadToken != parent.reloadToken else { return }
@@ -218,13 +219,13 @@ struct EmbeddedWebView: UIViewRepresentable {
         }
 
         @objc private func goBack() {
-            guard let webView, webView.canGoBack else { return }
-            webView.goBack()
+            guard let hostedWebView, hostedWebView.canGoBack else { return }
+            hostedWebView.goBack()
         }
 
         @objc private func goForward() {
-            guard let webView, webView.canGoForward else { return }
-            webView.goForward()
+            guard let hostedWebView, hostedWebView.canGoForward else { return }
+            hostedWebView.goForward()
         }
 
         deinit {

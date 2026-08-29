@@ -9,12 +9,14 @@ workflows:
       - name: Build the Swift Playground package for iOS Simulator
         script: |
           set -euo pipefail
+          mkdir -p "$CM_BUILD_DIR/build/ios"
           cd "$CM_BUILD_DIR/Stemist.swiftpm"
           xcodebuild \
             -scheme Stemist \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$CM_BUILD_DIR/build/ios" \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee "$CM_BUILD_DIR/build/ios/xcodebuild.log"
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
+      - build/ios/xcodebuild.log
