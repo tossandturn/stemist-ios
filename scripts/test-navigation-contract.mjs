@@ -108,6 +108,11 @@ assert.doesNotMatch(webModule, /stemistWebGoBack|stemistWebGoForward/, 'global n
 assert.match(webModule, /websiteDataStore\s*=\s*\.default\(\)/, 'SSO cookies must persist across app launches')
 assert.match(webModule, /WKUIDelegate/, 'WebKit UI delegate is required for upload and media flows')
 assert.match(webModule, /runOpenPanelWith/, 'writing and question uploads need a document picker')
+assert.match(
+  webModule,
+  /#if\s+compiler\(>=6\.0\)[\s\S]*?WKOpenPanelParameters[\s\S]*?#endif/,
+  'the iOS 18.4 file-picker API must be conditionally compiled for older SDKs'
+)
 assert.match(webModule, /requestMediaCapturePermissionFor/, 'speaking needs an explicit media permission policy')
 assert.match(webModule, /userInterfaceIdiom\s*==\s*\.pad/, 'iPad input needs a dedicated gesture policy')
 assert.match(webModule, /allowedTouchTypes/, 'the scroll gesture must not consume Apple Pencil input')

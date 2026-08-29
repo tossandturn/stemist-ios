@@ -350,6 +350,8 @@ struct EmbeddedWebView: UIViewRepresentable {
             return nil
         }
 
+#if compiler(>=6.0)
+        @available(iOS 18.4, *)
         func webView(
             _ webView: WKWebView,
             runOpenPanelWith parameters: WKOpenPanelParameters,
@@ -391,6 +393,7 @@ struct EmbeddedWebView: UIViewRepresentable {
             }
             presenter.present(picker, animated: true)
         }
+#endif
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             finishFileUpload(with: urls)
