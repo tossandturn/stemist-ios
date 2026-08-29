@@ -13,8 +13,11 @@ workflows:
           cd "$CM_BUILD_DIR/Stemist.swiftpm"
           xcodebuild \
             -scheme Stemist \
+            -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$CM_BUILD_DIR/build/ios" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee "$CM_BUILD_DIR/build/ios/xcodebuild.log"
     artifacts:
