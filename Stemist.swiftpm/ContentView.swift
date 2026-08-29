@@ -79,7 +79,10 @@ struct ContentView: View {
             WebModuleView(route: route)
         }
         .onOpenURL { url in
-            deepLinkedRoute = WebRoute(url: url)
+            deepLinkedRoute = WebRoute(
+                url: url,
+                allowsAccountEntry: configuration.showsAccountEntry
+            )
         }
         .onAppear {
             normalizeSelectedTab()
@@ -413,7 +416,7 @@ enum WebRoute: Hashable, Identifiable {
         .aiCoach,
     ]
 
-    init?(url: URL) {
+    init?(url: URL, allowsAccountEntry: Bool = true) {
         guard let scheme = url.scheme?.lowercased() else { return nil }
 
         switch scheme {
@@ -437,6 +440,7 @@ enum WebRoute: Hashable, Identifiable {
                   let matchingRoute = Self.all.first(where: { $0.id == decodedID }) else {
                 return nil
             }
+            guard allowsAccountEntry || matchingRoute != .ieltsAccount else { return nil }
             self = matchingRoute
 
         case "https":
@@ -445,6 +449,7 @@ enum WebRoute: Hashable, Identifiable {
                 .first(where: { $0.matches(url) }) else {
                 return nil
             }
+            guard allowsAccountEntry || matchingRoute != .ieltsAccount else { return nil }
             self = matchingRoute
 
         default:

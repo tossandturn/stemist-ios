@@ -20,6 +20,11 @@ assert.match(runtimeConfiguration, /showsAccountEntry/, 'runtime configuration m
 assert.match(runtimeConfiguration, /static let current\s*=\s*AppRuntimeConfiguration\(\)/, 'normal builds must use a deterministic default configuration')
 assert.match(contentView, /configuration\.showsAccountEntry/, 'the Profile account entry must be hidden by default')
 assert.match(contentView, /WebRoute\.ieltsAccount/, 'the account route must remain available for explicit full-function tests')
+assert.match(
+  contentView,
+  /WebRoute\(\s*url:\s*url,[\s\S]*?allowsAccountEntry:\s*configuration\.showsAccountEntry\s*\)/,
+  'normal deep links must not expose the hidden account route'
+)
 assert.match(contentView, /normalizeSelectedTab/, 'normal mode must recover from a restored hidden Profile tab')
 assert.match(
   contentView,
@@ -29,7 +34,11 @@ assert.match(
 assert.match(contentView, /onChange\(of:\s*selectedTab/, 'tab selection normalization must also handle state restoration')
 assert.match(packageSwift, /\.iOS\("17\.0"\)/, 'the app should support iPadOS 17 and newer')
 assert.doesNotMatch(packageSwift, /\.iOS\("18\.6"\)/, 'the deployment target must not require the newest iPadOS')
-assert.match(contentView, /init\?\(url:\s*URL\)/, 'typed routes must parse app deep links')
+assert.match(
+  contentView,
+  /init\?\(url:\s*URL,\s*allowsAccountEntry:\s*Bool/,
+  'typed routes must parse app deep links with account visibility policy'
+)
 assert.match(contentView, /\.onOpenURL\s*\{/, 'the root view must accept app deep links')
 assert.match(contentView, /queryItems/, 'deep links must support route query parameters')
 assert.match(contentView, /fullScreenCover\(item:/, 'learning workspaces must open as immersive full-screen flows')
@@ -112,6 +121,11 @@ assert.match(webModule, /currentURL/, 'Safari fallback must preserve the current
 assert.doesNotMatch(webModule, /stemistWebGoBack|stemistWebGoForward/, 'global navigation notifications must be removed')
 assert.match(webModule, /websiteDataStore\s*=\s*\.default\(\)/, 'SSO cookies must persist across app launches')
 assert.match(webModule, /WKUIDelegate/, 'WebKit UI delegate is required for upload and media flows')
+assert.match(
+  webModule,
+  /if\s+ProductWebPolicy\.isAllowed\(targetURL\)\s*\|\|\s*ExternalWebPolicy\.canKeepAuthenticationRedirect\(targetURL,\s*from:\s*webView\.url\)/,
+  'OAuth popup redirects must remain in the shared WebView session'
+)
 assert.match(webModule, /runOpenPanelWith/, 'writing and question uploads need a document picker')
 assert.match(
   webModule,

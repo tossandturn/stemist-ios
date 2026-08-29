@@ -342,7 +342,8 @@ struct EmbeddedWebView: UIViewRepresentable {
         ) -> WKWebView? {
             guard let targetURL = navigationAction.request.url else { return nil }
 
-            if ProductWebPolicy.isAllowed(targetURL) {
+            if ProductWebPolicy.isAllowed(targetURL)
+                || ExternalWebPolicy.canKeepAuthenticationRedirect(targetURL, from: webView.url) {
                 webView.load(navigationAction.request)
             } else if ExternalWebPolicy.canOpen(targetURL) {
                 UIApplication.shared.open(targetURL, options: [:])
