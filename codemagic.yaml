@@ -23,7 +23,21 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
+            INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
+            INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
             build 2>&1 | tee "$CM_BUILD_DIR/build/ios/xcodebuild.log"
+      - name: Verify generated app metadata
+        script: |
+          set -euo pipefail
+          APP_PATH="$(find "$CM_BUILD_DIR/build/ios/Build/Products" -type d -name '*.app' -print -quit)"
+          test -n "$APP_PATH"
+          PLIST="$APP_PATH/Info.plist"
+          test -f "$PLIST"
+          for key in NSMicrophoneUsageDescription NSCameraUsageDescription NSPhotoLibraryUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$PLIST" >/dev/null
+          done
+          echo "Verified privacy usage descriptions in $PLIST"
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
       - build/ios/xcodebuild.log

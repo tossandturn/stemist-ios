@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 import WebKit
 import SafariServices
+import UniformTypeIdentifiers
 
 final class WebViewStore: ObservableObject {
     weak var webView: WKWebView?
@@ -25,6 +26,38 @@ enum ProductWebPolicy {
         guard url.scheme?.lowercased() == "https" else { return false }
         let host = (url.host ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         return host == "ieltsist.com" || host.hasSuffix(".ieltsist.com")
+    }
+}
+
+enum ExternalWebPolicy {
+    private static let allowedSchemes: Set<String> = ["http", "https", "mailto", "tel", "itms-apps"]
+    private static let authenticationRedirectHosts: Set<String> = [
+        "accounts.google.com",
+        "appleid.apple.com",
+        "login.microsoftonline.com",
+    ]
+
+    static func canOpen(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return allowedSchemes.contains(scheme)
+    }
+
+    static func canKeepAuthenticationRedirect(
+        _ url: URL,
+        from sourceURL: URL?,
+        navigationType: WKNavigationType
+    ) -> Bool {
+        guard navigationType == .other,
+              let sourceURL,
+              ProductWebPolicy.isAllowed(sourceURL),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased() else {
+            return false
+        }
+
+        return authenticationRedirectHosts.contains(host)
+            || host == "auth.ieltsist.com"
+            || host.hasSuffix(".auth.ieltsist.com")
     }
 }
 
@@ -70,6 +103,7 @@ struct WebModuleView: View {
                             reloadToken = UUID()
                         }
                         .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("web-retry")
                     }
                     .padding(24)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -81,23 +115,27 @@ struct WebModuleView: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
-            .overlay(alignment: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 18) {
                     Button {
                         webViewStore.goBack()
                     } label: {
                         Image(systemName: "chevron.backward")
+                            .frame(width: 44, height: 44)
                     }
                     .disabled(!canGoBack)
                     .accessibilityLabel("Back")
+                    .accessibilityIdentifier("web-back")
 
                     Button {
                         webViewStore.goForward()
                     } label: {
                         Image(systemName: "chevron.forward")
+                            .frame(width: 44, height: 44)
                     }
                     .disabled(!canGoForward)
                     .accessibilityLabel("Forward")
+                    .accessibilityIdentifier("web-forward")
 
                     Spacer()
 
@@ -107,21 +145,24 @@ struct WebModuleView: View {
                         isLoading = true
                     } label: {
                         Image(systemName: "arrow.clockwise")
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Reload")
+                    .accessibilityIdentifier("web-reload")
 
                     Button {
                         showsSafari = true
                     } label: {
                         Image(systemName: "safari")
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Open current page in Safari")
+                    .accessibilityIdentifier("web-safari")
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 .background(.bar)
             }
-            .ignoresSafeArea(edges: .bottom)
             .navigationTitle(route.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -130,8 +171,10 @@ struct WebModuleView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
+                            .frame(width: 44, height: 44)
                     }
                     .accessibilityLabel("Close \(route.title)")
+                    .accessibilityIdentifier("web-close")
                 }
             }
             .sheet(isPresented: $showsSafari) {
@@ -155,14 +198,21 @@ struct EmbeddedWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.processPool = WebViewEnvironment.processPool
+        configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.allowsLinkPreview = false
+        webView.scrollView.alwaysBounceVertical = true
+        webView.scrollView.delaysContentTouches = false
         webView.scrollView.keyboardDismissMode = .interactive
         store.webView = webView
         context.coordinator.load(url, in: webView)
@@ -181,11 +231,13 @@ struct EmbeddedWebView: UIViewRepresentable {
         Coordinator(parent: self, store: store)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate {
         var parent: EmbeddedWebView
         var store: WebViewStore
         var requestedURL: URL?
         var lastReloadToken: UUID?
+        var fileUploadCompletion: (([URL]?) -> Void)?
+        var hasRetriedAfterTermination = false
 
         init(parent: EmbeddedWebView, store: WebViewStore) {
             self.parent = parent
@@ -228,6 +280,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             parent.isLoading = false
             parent.loadError = nil
+            hasRetriedAfterTermination = false
             updateNavigationState(webView)
         }
 
@@ -246,6 +299,129 @@ struct EmbeddedWebView: UIViewRepresentable {
             updateNavigationState(webView)
         }
 
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            guard !hasRetriedAfterTermination else {
+                parent.isLoading = false
+                parent.loadError = "The page stopped unexpectedly. Tap Reload to continue."
+                updateNavigationState(webView)
+                return
+            }
+
+            hasRetriedAfterTermination = true
+            parent.isLoading = true
+            parent.loadError = nil
+            webView.reload()
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            guard let targetURL = navigationAction.request.url else { return nil }
+
+            if ProductWebPolicy.isAllowed(targetURL) {
+                webView.load(navigationAction.request)
+            } else if ExternalWebPolicy.canOpen(targetURL) {
+                UIApplication.shared.open(targetURL, options: [:])
+            }
+            return nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runOpenPanelWith parameters: WKOpenPanelParameters,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping ([URL]?) -> Void
+        ) {
+            fileUploadCompletion?(nil)
+            fileUploadCompletion = completionHandler
+
+            let picker = UIDocumentPickerViewController(
+                forOpeningContentTypes: [
+                    UTType.item,
+                    UTType.pdf,
+                    UTType.plainText,
+                    UTType.data,
+                    UTType.image,
+                    UTType.audio,
+                    UTType.movie,
+                ],
+                asCopy: true
+            )
+            picker.allowsMultipleSelection = parameters.allowsMultipleSelection
+            picker.delegate = self
+
+            guard let presenter = presentingViewController(for: webView) else {
+                finishFileUpload(with: nil)
+                return
+            }
+
+            if let popover = picker.popoverPresentationController {
+                popover.sourceView = webView
+                popover.sourceRect = CGRect(
+                    x: webView.bounds.midX,
+                    y: webView.bounds.midY,
+                    width: 1,
+                    height: 1
+                )
+                popover.permittedArrowDirections = []
+            }
+            presenter.present(picker, animated: true)
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            finishFileUpload(with: urls)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            finishFileUpload(with: nil)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+            initiatedByFrame frame: WKFrameInfo,
+            type: WKMediaCaptureType,
+            decisionHandler: @escaping (WKPermissionDecision) -> Void
+        ) {
+            guard let originURL = URL(string: "\(origin.protocol)://\(origin.host)"),
+                  ProductWebPolicy.isAllowed(originURL) else {
+                decisionHandler(.deny)
+                return
+            }
+
+            decisionHandler(.prompt)
+        }
+
+        private func finishFileUpload(with urls: [URL]?) {
+            let completion = fileUploadCompletion
+            fileUploadCompletion = nil
+            completion?(urls)
+        }
+
+        private func presentingViewController(for view: UIView) -> UIViewController? {
+            var responder: UIResponder? = view
+            while let current = responder {
+                if let viewController = current as? UIViewController {
+                    var presenter = viewController
+                    while let presented = presenter.presentedViewController {
+                        presenter = presented
+                    }
+                    return presenter
+                }
+                responder = current.next
+            }
+
+            guard let rootViewController = view.window?.rootViewController else { return nil }
+            var presenter = rootViewController
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            return presenter
+        }
+
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let targetURL = navigationAction.request.url else {
                 decisionHandler(.cancel)
@@ -262,8 +438,26 @@ struct EmbeddedWebView: UIViewRepresentable {
                 return
             }
 
+            if ExternalWebPolicy.canKeepAuthenticationRedirect(
+                targetURL,
+                from: webView.url,
+                navigationType: navigationAction.navigationType
+            ) {
+                decisionHandler(.allow)
+                return
+            }
+
+            guard ExternalWebPolicy.canOpen(targetURL) else {
+                decisionHandler(.cancel)
+                return
+            }
+
             UIApplication.shared.open(targetURL, options: [:])
             decisionHandler(.cancel)
+        }
+
+        deinit {
+            fileUploadCompletion?(nil)
         }
     }
 }

@@ -9,13 +9,20 @@ enum AppTab: Hashable {
 }
 
 struct ContentView: View {
+    let configuration: AppRuntimeConfiguration
     @State private var selectedTab: AppTab = .today
+    @State private var deepLinkedRoute: WebRoute?
+
+    init(configuration: AppRuntimeConfiguration = .current) {
+        self.configuration = configuration
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             DashboardView(selectedTab: $selectedTab)
                 .tabItem { Label("Today", systemImage: "house") }
                 .tag(AppTab.today)
+                .accessibilityIdentifier("tab-today")
 
             ModuleHomeView(
                 title: "IELTS",
@@ -30,6 +37,7 @@ struct ContentView: View {
             )
             .tabItem { Label("IELTS", systemImage: "text.book.closed") }
             .tag(AppTab.ielts)
+            .accessibilityIdentifier("tab-ielts")
 
             ModuleHomeView(
                 title: "STEM",
@@ -41,20 +49,33 @@ struct ContentView: View {
                     .stemTopics,
                     .stemPastPapers,
                     .stemNotebook,
+                    .stemCoach,
                 ]
             )
             .tabItem { Label("STEM", systemImage: "atom") }
             .tag(AppTab.stem)
+            .accessibilityIdentifier("tab-stem")
 
             NotebookView()
                 .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
                 .tag(AppTab.notebook)
+                .accessibilityIdentifier("tab-notebook")
 
-            ProfileView()
-                .tabItem { Label("Profile", systemImage: "person") }
-                .tag(AppTab.profile)
+            if configuration.showsAccountEntry {
+                ProfileView()
+                    .tabItem { Label("Profile", systemImage: "person") }
+                    .tag(AppTab.profile)
+                    .accessibilityIdentifier("tab-profile")
+            }
         }
         .tint(StemistTheme.brand)
+        .fullScreenCover(item: $deepLinkedRoute) { route in
+            WebModuleView(route: route)
+        }
+        .onOpenURL { url in
+            deepLinkedRoute = WebRoute(url: url)
+        }
+        .accessibilityIdentifier("stemist-root")
     }
 }
 
@@ -132,6 +153,7 @@ private struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open notebook")
+                    .accessibilityIdentifier("open-notebook")
                 }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -140,7 +162,7 @@ private struct DashboardView: View {
             }
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $selectedRoute) { route in
+            .fullScreenCover(item: $selectedRoute) { route in
                 WebModuleView(route: route)
             }
         }
@@ -189,6 +211,7 @@ private struct LearningSpaceButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens \(title)")
+        .accessibilityIdentifier("learning-space-\(title.lowercased().replacingOccurrences(of: " ", with: "-"))")
     }
 }
 
@@ -229,7 +252,7 @@ private struct ModuleHomeView: View {
                                     Text(route.subtitle)
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
-                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer(minLength: 8)
                                 Image(systemName: "arrow.up.right")
@@ -240,6 +263,7 @@ private struct ModuleHomeView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open \(route.title)")
+                        .accessibilityIdentifier("route-\(route.id)")
                     }
                 } header: {
                     Text("Study")
@@ -249,7 +273,7 @@ private struct ModuleHomeView: View {
             .scrollContentBackground(.hidden)
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(item: $selectedRoute) { route in
+            .fullScreenCover(item: $selectedRoute) { route in
                 WebModuleView(route: route)
             }
         }
@@ -284,7 +308,7 @@ private struct NotebookView: View {
             .frame(maxWidth: 760, maxHeight: .infinity, alignment: .topLeading)
             .padding(20)
             .background(StemistTheme.background)
-            .sheet(item: $selectedRoute) { route in
+            .fullScreenCover(item: $selectedRoute) { route in
                 WebModuleView(route: route)
             }
         }
@@ -306,11 +330,14 @@ private struct ProfileView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Open account")
+                    .accessibilityIdentifier("route-\(WebRoute.ieltsAccount.id)")
                 }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Profile")
-            .sheet(item: $selectedRoute) { route in
+            .fullScreenCover(item: $selectedRoute) { route in
                 WebModuleView(route: route)
             }
         }
@@ -355,6 +382,97 @@ enum WebRoute: Hashable, Identifiable {
     case stemNotebook
     case stemCoach
     case aiCoach
+
+    static let all: [WebRoute] = [
+        .ieltsListening,
+        .ieltsReading,
+        .ieltsWriting,
+        .ieltsSpeaking,
+        .ieltsVocabulary,
+        .ieltsAccount,
+        .stemHome,
+        .stemIG,
+        .stemAS,
+        .stemA2,
+        .stemTopics,
+        .stemPastPapers,
+        .stemNotebook,
+        .stemCoach,
+        .aiCoach,
+    ]
+
+    init?(url: URL) {
+        guard let scheme = url.scheme?.lowercased() else { return nil }
+
+        switch scheme {
+        case "stemist":
+            guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return nil
+            }
+
+            let pathID = components.path
+                .split(separator: "/", omittingEmptySubsequences: true)
+                .last
+                .map(String.init)
+            let hostID = components.host?.lowercased()
+            let queryID = components.queryItems?.first(where: { item in
+                ["route", "routeid", "route_id"].contains(item.name.lowercased())
+            })?.value
+            let candidateID = queryID ?? pathID ?? (hostID == "open" || hostID == "route" ? nil : hostID)
+
+            guard let candidateID,
+                  let decodedID = candidateID.removingPercentEncoding?.lowercased(),
+                  let matchingRoute = Self.all.first(where: { $0.id == decodedID }) else {
+                return nil
+            }
+            self = matchingRoute
+
+        case "https":
+            guard let matchingRoute = Self.all
+                .sorted(by: { $0.expectedQueryItemCount > $1.expectedQueryItemCount })
+                .first(where: { $0.matches(url) }) else {
+                return nil
+            }
+            self = matchingRoute
+
+        default:
+            return nil
+        }
+    }
+
+    private var expectedQueryItemCount: Int {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.count ?? 0
+    }
+
+    private func matches(_ incomingURL: URL) -> Bool {
+        guard let expected = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let incoming = URLComponents(url: incomingURL, resolvingAgainstBaseURL: false),
+              expected.scheme?.lowercased() == incoming.scheme?.lowercased(),
+              expected.host?.lowercased() == incoming.host?.lowercased(),
+              normalizedPath(expected.path) == normalizedPath(incoming.path) else {
+            return false
+        }
+
+        if let expectedFragment = expected.fragment {
+            guard incoming.fragment == expectedFragment else { return false }
+        } else if incoming.fragment != nil {
+            return false
+        }
+
+        let expectedItems = expected.queryItems ?? []
+        let incomingItems = incoming.queryItems ?? []
+        guard !expectedItems.isEmpty else { return incomingItems.isEmpty }
+
+        return expectedItems.allSatisfy { expectedItem in
+            incomingItems.contains { incomingItem in
+                incomingItem.name == expectedItem.name && incomingItem.value == expectedItem.value
+            }
+        }
+    }
+
+    private func normalizedPath(_ path: String) -> String {
+        path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+    }
 
     var id: String {
         switch self {

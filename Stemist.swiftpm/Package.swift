@@ -29,6 +29,17 @@ let package = Package(
                 .landscapeRight,
                 .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
+            ],
+            capabilities: [
+                .microphone(
+                    purposeString: "Use the microphone for IELTS speaking practice and voice feedback."
+                ),
+                .camera(
+                    purposeString: "Use the camera to capture handwritten STEM work for marking."
+                ),
+                .photoLibrary(
+                    purposeString: "Choose handwritten work and source files from your photo library."
+                )
             ]
         )
     ],
