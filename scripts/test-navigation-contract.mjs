@@ -351,6 +351,16 @@ assert.match(
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
+assert.match(
+  shellUITests,
+  /private func webModule\(_ identifier: String\) -> XCUIElement[\s\S]*?app\.webViews\[identifier\]/,
+  'iPad UI tests must query module identifiers through XCUIElementTypeWebView'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /app\.otherElements\[(?:moduleIdentifier|"web-module-)/,
+  'module identifiers resolve to WebView elements on iPad and must not be queried as Other elements'
+)
 assert.match(shellUITests, /XCUIScreen\.main\.screenshot\(\)/, 'UI tests must retain rendered iPad evidence instead of relying on fixed sleeps')
 assert.match(shellUITests, /attachment\.lifetime = \.keepAlways/, 'route evidence must survive successful CI test runs')
 for (const [buttonIdentifier, moduleIdentifier] of [

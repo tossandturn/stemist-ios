@@ -25,7 +25,7 @@ final class StemistShellUITests: XCTestCase {
         attachScreenshot(named: "student-account-entry-hidden")
 
         app.open(accountURL)
-        XCTAssertFalse(app.otherElements["web-module-ielts-account"].waitForExistence(timeout: 1))
+        XCTAssertFalse(webModule("web-module-ielts-account").waitForExistence(timeout: 1))
         XCTAssertTrue(app.otherElements["stemist-root"].exists)
         attachScreenshot(named: "student-account-deep-link-blocked")
     }
@@ -100,7 +100,7 @@ final class StemistShellUITests: XCTestCase {
         )
 
         app.open(accountURL)
-        let accountModule = app.otherElements["web-module-ielts-account"]
+        let accountModule = webModule("web-module-ielts-account")
         XCTAssertTrue(accountModule.waitForExistence(timeout: 3))
         attachScreenshot(named: "qa-account-deep-link-opened")
         closeWebModule(accountModule, named: "web-module-ielts-account")
@@ -201,7 +201,7 @@ final class StemistShellUITests: XCTestCase {
         guard routeButton.exists else { return }
         routeButton.tap()
 
-        let module = app.otherElements[moduleIdentifier]
+        let module = webModule(moduleIdentifier)
         guard module.waitForExistence(timeout: 3) else {
             XCTFail(
                 "Expected \(buttonIdentifier) to open \(moduleIdentifier)."
@@ -211,6 +211,10 @@ final class StemistShellUITests: XCTestCase {
         }
         attachScreenshot(named: "\(moduleIdentifier)-opened")
         closeWebModule(module, named: moduleIdentifier)
+    }
+
+    private func webModule(_ identifier: String) -> XCUIElement {
+        app.webViews[identifier]
     }
 
     private func closeWebModule(_ module: XCUIElement, named moduleIdentifier: String) {
