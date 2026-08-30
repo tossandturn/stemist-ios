@@ -131,7 +131,10 @@ workflows:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             STEMIST_FULL_FEATURE_TEST=NO \
-            -only-testing:StemistShellUITests \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildCanOpenAndCloseEveryIELTSRoute \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildCanOpenAndCloseEverySTEMRoute \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook \
             2>&1 | tee "$CM_BUILD_DIR/build/ios/student-shell-ui-tests.log"
           STUDENT_UI_TEST_STATUS=${PIPESTATUS[0]}
           xcodebuild test \

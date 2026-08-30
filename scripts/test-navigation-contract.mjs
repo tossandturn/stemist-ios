@@ -333,6 +333,21 @@ assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'th
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
 assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
+assert.doesNotMatch(
+  shellUITests,
+  /app\.tabBars\.buttons/,
+  'iPadOS floating tab controls must be queried through the application button hierarchy'
+)
+assert.match(
+  shellUITests,
+  /app\.buttons\[visibleLabel\]/,
+  'tab navigation must use the visible accessibility label exposed by iPadOS floating tabs'
+)
+assert.match(
+  shellUITests,
+  /app\.buttons\["Profile"\]/,
+  'student mode must verify account-entry absence through the same floating-tab hierarchy used for navigation'
+)
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
@@ -549,8 +564,8 @@ assert.match(
 )
 assert.match(
   githubWorkflow,
-  /-scheme StemistShellUITests[\s\S]*?-only-testing:StemistShellUITests\s+\\/,
-  'macOS CI must run every student shell test instead of one smoke assertion'
+  /-scheme StemistShellUITests[\s\S]*?-only-testing:StemistShellUITests\/StemistShellUITests\/testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks\s+\\/,
+  'macOS CI must start the explicit student-only shell suite with the account-visibility test'
 )
 assert.match(
   githubWorkflow,
@@ -574,6 +589,30 @@ assert.match(
   /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/,
   'Codemagic must execute the complete QA learning flow'
 )
+
+const studentShellTests = [
+  'testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks',
+  'testStudentBuildCanOpenAndCloseEveryIELTSRoute',
+  'testStudentBuildCanOpenAndCloseEverySTEMRoute',
+  'testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook',
+]
+for (const [workflowName, workflow] of [
+  ['GitHub Actions', githubWorkflow],
+  ['Codemagic', codemagic],
+]) {
+  for (const testName of studentShellTests) {
+    assert.match(
+      workflow,
+      new RegExp(`-only-testing:StemistShellUITests/StemistShellUITests/${testName}`),
+      `${workflowName} must run the student-only UI test ${testName}`
+    )
+  }
+  assert.doesNotMatch(
+    workflow,
+    /-only-testing:StemistShellUITests\s+\\/,
+    `${workflowName} must not run the QA test inside the student-mode invocation`
+  )
+}
 assert.match(githubWorkflow, /student-shell-ui-tests\.log/, 'macOS CI must retain the student UI test log')
 assert.match(githubWorkflow, /qa-shell-ui-tests\.log/, 'macOS CI must retain the QA UI test log')
 assert.match(githubWorkflow, /PlistBuddy/, 'macOS CI must verify generated app metadata')

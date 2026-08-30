@@ -21,7 +21,7 @@ final class StemistShellUITests: XCTestCase {
     func testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks() {
         launchApp(fullFeatureTest: false)
 
-        XCTAssertFalse(app.tabBars.buttons["tab-profile"].exists)
+        XCTAssertFalse(app.buttons["Profile"].exists)
         attachScreenshot(named: "student-account-entry-hidden")
 
         app.open(accountURL)
@@ -32,7 +32,7 @@ final class StemistShellUITests: XCTestCase {
 
     func testStudentBuildCanOpenAndCloseEveryIELTSRoute() {
         launchApp(fullFeatureTest: false)
-        selectTab("tab-ielts")
+        selectTab("IELTS")
 
         exerciseRoutes([
             RouteExpectation(buttonIdentifier: "route-ielts-listening", moduleIdentifier: "web-module-ielts-listening"),
@@ -45,7 +45,7 @@ final class StemistShellUITests: XCTestCase {
 
     func testStudentBuildCanOpenAndCloseEverySTEMRoute() {
         launchApp(fullFeatureTest: false)
-        selectTab("tab-stem")
+        selectTab("STEM")
 
         exerciseRoutes([
             RouteExpectation(buttonIdentifier: "route-stem-ig", moduleIdentifier: "web-module-stem-ig"),
@@ -60,26 +60,26 @@ final class StemistShellUITests: XCTestCase {
 
     func testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook() {
         launchApp(fullFeatureTest: false)
-        selectTab("tab-today")
+        selectTab("Today")
 
         assertDashboardLearningSpace(
             "learning-space-ielts-practice",
             exposesRoute: "route-ielts-listening"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-stem-study",
             exposesRoute: "route-stem-ig"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         openAndCloseRoute(
             buttonIdentifier: "learning-space-ai-coach",
             moduleIdentifier: "web-module-ai-coach"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         let notebookEntry = app.buttons["open-notebook"]
         XCTAssertTrue(notebookEntry.waitForExistence(timeout: 3))
         notebookEntry.tap()
@@ -92,7 +92,7 @@ final class StemistShellUITests: XCTestCase {
     func testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes() {
         launchApp(fullFeatureTest: true)
 
-        selectTab("tab-profile")
+        selectTab("Profile")
         attachScreenshot(named: "qa-profile-entry-visible")
         openAndCloseRoute(
             buttonIdentifier: "route-ielts-account",
@@ -105,7 +105,7 @@ final class StemistShellUITests: XCTestCase {
         attachScreenshot(named: "qa-account-deep-link-opened")
         closeWebModule(accountModule, named: "web-module-ielts-account")
 
-        selectTab("tab-ielts")
+        selectTab("IELTS")
         exerciseRoutes([
             RouteExpectation(buttonIdentifier: "route-ielts-listening", moduleIdentifier: "web-module-ielts-listening"),
             RouteExpectation(buttonIdentifier: "route-ielts-reading", moduleIdentifier: "web-module-ielts-reading"),
@@ -114,7 +114,7 @@ final class StemistShellUITests: XCTestCase {
             RouteExpectation(buttonIdentifier: "route-ielts-vocabulary", moduleIdentifier: "web-module-ielts-vocabulary"),
         ])
 
-        selectTab("tab-stem")
+        selectTab("STEM")
         exerciseRoutes([
             RouteExpectation(buttonIdentifier: "route-stem-ig", moduleIdentifier: "web-module-stem-ig"),
             RouteExpectation(buttonIdentifier: "route-stem-as", moduleIdentifier: "web-module-stem-as"),
@@ -125,25 +125,25 @@ final class StemistShellUITests: XCTestCase {
             RouteExpectation(buttonIdentifier: "route-stem-coach", moduleIdentifier: "web-module-stem-coach"),
         ])
 
-        selectTab("tab-today")
+        selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-ielts-practice",
             exposesRoute: "route-ielts-listening"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-stem-study",
             exposesRoute: "route-stem-ig"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         openAndCloseRoute(
             buttonIdentifier: "learning-space-ai-coach",
             moduleIdentifier: "web-module-ai-coach"
         )
 
-        selectTab("tab-today")
+        selectTab("Today")
         let notebookEntry = app.buttons["open-notebook"]
         XCTAssertTrue(notebookEntry.waitForExistence(timeout: 3))
         notebookEntry.tap()
@@ -161,10 +161,10 @@ final class StemistShellUITests: XCTestCase {
         attachScreenshot(named: fullFeatureTest ? "qa-launch" : "student-launch")
     }
 
-    private func selectTab(_ identifier: String) {
-        let tab = app.tabBars.buttons[identifier]
+    private func selectTab(_ visibleLabel: String) {
+        let tab = app.buttons[visibleLabel]
         guard tab.waitForExistence(timeout: 3) else {
-            XCTFail("Expected tab \(identifier) to be available.\n\n\(app.debugDescription)")
+            XCTFail("Expected tab \(visibleLabel) to be available.\n\n\(app.debugDescription)")
             return
         }
         tab.tap()
