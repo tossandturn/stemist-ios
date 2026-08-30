@@ -154,6 +154,40 @@ final class StemistShellUITests: XCTestCase {
         )
     }
 
+    func testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal() {
+        launchApp(fullFeatureTest: true)
+        selectTab("IELTS")
+
+        let listeningRoute = app.buttons["route-ielts-listening"]
+        XCTAssertTrue(waitUntilHittable(listeningRoute))
+        guard listeningRoute.exists, listeningRoute.isHittable else { return }
+        listeningRoute.tap()
+
+        let listeningModule = webModule("web-module-ielts-listening")
+        XCTAssertTrue(listeningModule.waitForExistence(timeout: 3))
+
+        let closeButton = app.buttons["web-close"]
+        XCTAssertTrue(waitUntilHittable(closeButton))
+        guard closeButton.exists, closeButton.isHittable else { return }
+        closeButton.tap()
+        app.open(accountURL)
+
+        XCTAssertTrue(
+            listeningModule.waitForNonExistence(timeout: 5),
+            "Expected the prior IELTS module to finish dismissing"
+        )
+        let accountModule = webModule("web-module-ielts-account")
+        guard accountModule.waitForExistence(timeout: 5) else {
+            XCTFail(
+                "Expected the queued account deep link to open after dismissal."
+                    + "\n\nAccessibility hierarchy after queued deep link:\n\(app.debugDescription)"
+            )
+            return
+        }
+        attachScreenshot(named: "qa-account-deep-link-replayed-after-dismissal")
+        closeWebModule(accountModule, named: "web-module-ielts-account")
+    }
+
     private func launchApp(fullFeatureTest: Bool) {
         app = XCUIApplication()
         app.launchEnvironment["STEMIST_FULL_FEATURE_TEST"] = fullFeatureTest ? "YES" : "NO"

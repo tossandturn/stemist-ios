@@ -95,6 +95,11 @@ assert.match(
   contentView,
   /@State\s+private\s+var\s+pendingWebLaunch:\s*WebRouteLaunch\?/
 )
+assert.match(
+  contentView,
+  /@State\s+private\s+var\s+isWebLaunchDismissing(?:\s*:\s*Bool)?\s*=/,
+  'route replacement must distinguish an empty presenter from an in-flight dismissal'
+)
 assert.doesNotMatch(
   contentView,
   /queuedWebLaunches/,
@@ -102,7 +107,7 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /fullScreenCover\(item:\s*\$activeWebLaunch,\s*onDismiss:\s*presentPendingWebLaunch\)/,
+  /fullScreenCover\(item:\s*\$activeWebLaunch,\s*onDismiss:\s*handleWebLaunchDismissed\)/,
   'the root presenter must serialize a route received while another module is dismissing'
 )
 assert.match(
@@ -112,22 +117,27 @@ assert.match(
 )
 assert.match(
   contentView,
-  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?presentPendingWebLaunch\(\)/,
-  'a queued route must be replayed when the active item reaches nil'
+  /private\s+func\s+handleWebLaunchDismissed\(\)[\s\S]{0,320}?isWebLaunchDismissing\s*=\s*false[\s\S]{0,320}?presentPendingWebLaunch\(\)/,
+  'the queued route must be replayed only from the full-screen dismissal completion'
 )
 assert.match(
   contentView,
-  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?guard\s+launch\s*==\s*nil/,
-  'the active presentation observer must only replay after the item is cleared'
+  /private\s+func\s+presentPendingWebLaunch\(\)[\s\S]{0,720}?guard\s+!isWebLaunchDismissing[\s\S]{0,720}?activeWebLaunch\s*=\s*pendingWebLaunch/,
+  'the queued route must remain blocked until dismissal has completed'
 )
 assert.match(
   contentView,
-  /private\s+func\s+presentPendingWebLaunch\(\)[\s\S]{0,480}?DispatchQueue\.main\.async/,
-  'a queued route must be replayed in a later main-queue transaction after dismissal'
+  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?previousLaunch\s*!=\s*nil[\s\S]{0,260}?isWebLaunchDismissing\s*=\s*true/,
+  'interactive dismissal must enter the same in-flight phase without replaying a route'
+)
+assert.doesNotMatch(
+  contentView,
+  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,500}?presentPendingWebLaunch\(\)/,
+  'active item changes must never replay a route before onDismiss'
 )
 assert.match(
   contentView,
-  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*\$activeWebLaunch\s*\)/,
+  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*\$activeWebLaunch,\s*isDismissing:\s*\$isWebLaunchDismissing\s*\)/,
   'the web module must receive the authoritative root presentation binding'
 )
 assert.doesNotMatch(
@@ -142,7 +152,12 @@ assert.match(
 )
 assert.match(
   webModule,
-  /presentedLaunch\s*=\s*nil[\s\S]{0,240}?webViewStore\.stopForDismissal/,
+  /@Binding\s+private\s+var\s+isDismissing:\s*Bool/,
+  'the web module must mark dismissal before clearing the root item'
+)
+assert.match(
+  webModule,
+  /isDismissing\s*=\s*true[\s\S]{0,160}?presentedLaunch\s*=\s*nil[\s\S]{0,240}?webViewStore\.stopForDismissal/,
   'the close action must clear the root item before stopping WebKit'
 )
 assert.match(
@@ -416,6 +431,7 @@ assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'th
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
 assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
+assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/, 'the shell suite must cover queued deep links during dismissal')
 assert.doesNotMatch(
   shellUITests,
   /app\.tabBars\.buttons/,
@@ -701,6 +717,16 @@ assert.match(
   codemagic,
   /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/,
   'Codemagic must execute the complete QA learning flow'
+)
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/,
+  'macOS CI must execute the dismissal/deep-link regression'
+)
+assert.match(
+  codemagic,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/,
+  'Codemagic must execute the dismissal/deep-link regression'
 )
 
 const studentShellTests = [

@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .today
     @State private var activeWebLaunch: WebRouteLaunch?
     @State private var pendingWebLaunch: WebRouteLaunch?
+    @State private var isWebLaunchDismissing = false
 
     init(configuration: AppRuntimeConfiguration = .current) {
         self.configuration = configuration
@@ -29,9 +30,15 @@ struct ContentView: View {
     }
 
     private func present(_ launch: WebRouteLaunch) {
-        guard activeWebLaunch == nil else {
+        if activeWebLaunch != nil {
             pendingWebLaunch = launch
+            isWebLaunchDismissing = true
             activeWebLaunch = nil
+            return
+        }
+
+        guard !isWebLaunchDismissing else {
+            pendingWebLaunch = launch
             return
         }
 
@@ -40,15 +47,23 @@ struct ContentView: View {
     }
 
     private func presentPendingWebLaunch() {
-        guard activeWebLaunch == nil, let pendingWebLaunch else { return }
-        self.pendingWebLaunch = nil
+        guard !isWebLaunchDismissing,
+              activeWebLaunch == nil,
+              let pendingWebLaunch else { return }
+
         DispatchQueue.main.async {
-            guard self.activeWebLaunch == nil else {
-                self.pendingWebLaunch = pendingWebLaunch
-                return
-            }
+            guard !self.isWebLaunchDismissing,
+                  self.activeWebLaunch == nil,
+                  self.pendingWebLaunch?.id == pendingWebLaunch.id else { return }
+
+            self.pendingWebLaunch = nil
             self.activeWebLaunch = pendingWebLaunch
         }
+    }
+
+    private func handleWebLaunchDismissed() {
+        isWebLaunchDismissing = false
+        presentPendingWebLaunch()
     }
 
     var body: some View {
@@ -106,10 +121,11 @@ struct ContentView: View {
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        .fullScreenCover(item: $activeWebLaunch, onDismiss: presentPendingWebLaunch) { launch in
+        .fullScreenCover(item: $activeWebLaunch, onDismiss: handleWebLaunchDismissed) { launch in
             WebModuleView(
                 launch: launch,
-                presentedLaunch: $activeWebLaunch
+                presentedLaunch: $activeWebLaunch,
+                isDismissing: $isWebLaunchDismissing
             )
                 .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         }
@@ -126,9 +142,9 @@ struct ContentView: View {
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
-        .onChange(of: activeWebLaunch) { _, launch in
-            guard launch == nil else { return }
-            presentPendingWebLaunch()
+        .onChange(of: activeWebLaunch) { previousLaunch, launch in
+            guard previousLaunch != nil, launch == nil else { return }
+            isWebLaunchDismissing = true
         }
         .accessibilityIdentifier("stemist-root")
     }

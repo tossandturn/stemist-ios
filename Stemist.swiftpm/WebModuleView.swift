@@ -256,6 +256,7 @@ struct WebModuleView: View {
     let route: WebRoute
     let launchURL: URL
     @Binding private var presentedLaunch: WebRouteLaunch?
+    @Binding private var isDismissing: Bool
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
@@ -270,19 +271,37 @@ struct WebModuleView: View {
         self.route = route
         launchURL = route.url
         _presentedLaunch = .constant(nil)
+        _isDismissing = .constant(false)
     }
 
     init(launch: WebRouteLaunch) {
-        self.init(launch: launch, presentedLaunch: .constant(nil))
+        self.init(
+            launch: launch,
+            presentedLaunch: .constant(nil),
+            isDismissing: .constant(false)
+        )
     }
 
     init(
         launch: WebRouteLaunch,
         presentedLaunch: Binding<WebRouteLaunch?>
     ) {
+        self.init(
+            launch: launch,
+            presentedLaunch: presentedLaunch,
+            isDismissing: .constant(false)
+        )
+    }
+
+    init(
+        launch: WebRouteLaunch,
+        presentedLaunch: Binding<WebRouteLaunch?>,
+        isDismissing: Binding<Bool>
+    ) {
         route = launch.route
         launchURL = launch.url
         _presentedLaunch = presentedLaunch
+        _isDismissing = isDismissing
     }
 
     private func retryLoading() {
@@ -382,9 +401,13 @@ struct WebModuleView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        presentedLaunch = nil
+                        if presentedLaunch != nil {
+                            isDismissing = true
+                            presentedLaunch = nil
+                        } else {
+                            dismiss()
+                        }
                         webViewStore.stopForDismissal()
-                        dismiss()
                     } label: {
                         Image(systemName: "xmark")
                             .frame(width: 44, height: 44)
