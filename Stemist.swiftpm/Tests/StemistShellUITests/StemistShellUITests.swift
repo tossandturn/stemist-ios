@@ -163,8 +163,10 @@ final class StemistShellUITests: XCTestCase {
 
     private func selectTab(_ identifier: String) {
         let tab = app.tabBars.buttons[identifier]
-        XCTAssertTrue(tab.waitForExistence(timeout: 3), "Expected tab \(identifier) to be available")
-        guard tab.exists else { return }
+        guard tab.waitForExistence(timeout: 3) else {
+            XCTFail("Expected tab \(identifier) to be available.\n\n\(app.debugDescription)")
+            return
+        }
         tab.tap()
     }
 
