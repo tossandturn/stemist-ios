@@ -105,6 +105,16 @@ assert.match(
   /let\s+openRoute:\s*\(WebRoute\)\s*->\s*Void/,
   'tab content must report typed route intent to the root presenter'
 )
+assert.match(
+  contentView,
+  /init\(route:\s*WebRoute\)\s*\{\s*self\.route\s*=\s*route\s*url\s*=\s*route\.url\s*\}/,
+  'native route presentation needs an explicit non-failable launch initializer'
+)
+assert.match(
+  contentView,
+  /present\(WebRouteLaunch\(route:\s*route\)\)/,
+  'native route presentation must use the explicit typed launch initializer'
+)
 assert.match(packageSwift, /\.iOS\("17\.0"\)/, 'the app should support iPadOS 17 and newer')
 assert.doesNotMatch(packageSwift, /\.iOS\("18\.6"\)/, 'the deployment target must not require the newest iPadOS')
 assert.match(

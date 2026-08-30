@@ -25,7 +25,7 @@ struct ContentView: View {
     }
 
     private func present(_ route: WebRoute) {
-        present(WebRouteLaunch(route: route, url: route.url))
+        present(WebRouteLaunch(route: route))
     }
 
     private func present(_ launch: WebRouteLaunch) {
@@ -662,6 +662,11 @@ enum WebRoute: Hashable, Identifiable {
 struct WebRouteLaunch: Hashable, Identifiable {
     let route: WebRoute
     let url: URL
+
+    init(route: WebRoute) {
+        self.route = route
+        url = route.url
+    }
 
     var id: String {
         "\(route.id):\(url.absoluteString)"
