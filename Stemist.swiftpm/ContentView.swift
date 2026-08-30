@@ -11,7 +11,8 @@ enum AppTab: Hashable {
 struct ContentView: View {
     let configuration: AppRuntimeConfiguration
     @State private var selectedTab: AppTab = .today
-    @State private var deepLinkedRoute: WebRouteLaunch?
+    @State private var activeWebLaunch: WebRouteLaunch?
+    @State private var pendingWebLaunch: WebRouteLaunch?
 
     init(configuration: AppRuntimeConfiguration = .current) {
         self.configuration = configuration
@@ -23,9 +24,28 @@ struct ContentView: View {
         }
     }
 
+    private func present(_ route: WebRoute) {
+        present(WebRouteLaunch(route: route, url: route.url))
+    }
+
+    private func present(_ launch: WebRouteLaunch) {
+        guard activeWebLaunch == nil else {
+            pendingWebLaunch = launch
+            return
+        }
+
+        activeWebLaunch = launch
+    }
+
+    private func presentPendingWebLaunch() {
+        guard let pendingWebLaunch else { return }
+        self.pendingWebLaunch = nil
+        activeWebLaunch = pendingWebLaunch
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            DashboardView(selectedTab: $selectedTab)
+            DashboardView(selectedTab: $selectedTab, openRoute: present)
                 .tabItem { Label("Today", systemImage: "house") }
                 .tag(AppTab.today)
                 .accessibilityIdentifier("tab-today")
@@ -39,7 +59,8 @@ struct ContentView: View {
                     .ieltsWriting,
                     .ieltsSpeaking,
                     .ieltsVocabulary,
-                ]
+                ],
+                openRoute: present
             )
             .tabItem { Label("IELTS", systemImage: "text.book.closed") }
             .tag(AppTab.ielts)
@@ -56,19 +77,20 @@ struct ContentView: View {
                     .stemPastPapers,
                     .stemNotebook,
                     .stemCoach,
-                ]
+                ],
+                openRoute: present
             )
             .tabItem { Label("STEM", systemImage: "atom") }
             .tag(AppTab.stem)
             .accessibilityIdentifier("tab-stem")
 
-            NotebookView()
+            NotebookView(openRoute: present)
                 .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
                 .tag(AppTab.notebook)
                 .accessibilityIdentifier("tab-notebook")
 
             if configuration.showsAccountEntry {
-                ProfileView()
+                ProfileView(openRoute: present)
                     .tabItem { Label("Profile", systemImage: "person") }
                     .tag(AppTab.profile)
                     .accessibilityIdentifier("tab-profile")
@@ -76,14 +98,16 @@ struct ContentView: View {
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        .fullScreenCover(item: $deepLinkedRoute) { launch in
+        .fullScreenCover(item: $activeWebLaunch, onDismiss: presentPendingWebLaunch) { launch in
             WebModuleView(launch: launch)
+                .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         }
         .onOpenURL { url in
-            deepLinkedRoute = WebRouteLaunch(
+            guard let launch = WebRouteLaunch(
                 url: url,
                 allowsAccountEntry: configuration.showsAccountEntry
-            )
+            ) else { return }
+            present(launch)
         }
         .onAppear {
             normalizeSelectedTab()
@@ -97,7 +121,7 @@ struct ContentView: View {
 
 private struct DashboardView: View {
     @Binding var selectedTab: AppTab
-    @State private var selectedRoute: WebRoute?
+    let openRoute: (WebRoute) -> Void
 
     var body: some View {
         NavigationStack {
@@ -140,7 +164,7 @@ private struct DashboardView: View {
                             icon: "sparkles",
                             tint: StemistTheme.brand
                         ) {
-                            selectedRoute = .aiCoach
+                            openRoute(.aiCoach)
                         }
                     }
 
@@ -178,9 +202,6 @@ private struct DashboardView: View {
             }
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .fullScreenCover(item: $selectedRoute) { route in
-                WebModuleView(route: route)
-            }
         }
     }
 }
@@ -235,7 +256,7 @@ private struct ModuleHomeView: View {
     let title: String
     let subtitle: String
     let routes: [WebRoute]
-    @State private var selectedRoute: WebRoute?
+    let openRoute: (WebRoute) -> Void
 
     var body: some View {
         NavigationStack {
@@ -256,7 +277,7 @@ private struct ModuleHomeView: View {
                 Section {
                     ForEach(routes) { route in
                         Button {
-                            selectedRoute = route
+                            openRoute(route)
                         } label: {
                             HStack(spacing: 14) {
                                 Image(systemName: route.symbol)
@@ -289,15 +310,12 @@ private struct ModuleHomeView: View {
             .scrollContentBackground(.hidden)
             .background(StemistTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .fullScreenCover(item: $selectedRoute) { route in
-                WebModuleView(route: route)
-            }
         }
     }
 }
 
 private struct NotebookView: View {
-    @State private var selectedRoute: WebRoute?
+    let openRoute: (WebRoute) -> Void
 
     var body: some View {
         NavigationStack {
@@ -311,7 +329,7 @@ private struct NotebookView: View {
                 }
 
                 Button {
-                    selectedRoute = .stemNotebook
+                    openRoute(.stemNotebook)
                 } label: {
                     Label("Open STEM notebook", systemImage: "square.and.pencil")
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -325,22 +343,19 @@ private struct NotebookView: View {
             .frame(maxWidth: 760, maxHeight: .infinity, alignment: .topLeading)
             .padding(20)
             .background(StemistTheme.background)
-            .fullScreenCover(item: $selectedRoute) { route in
-                WebModuleView(route: route)
-            }
         }
     }
 }
 
 private struct ProfileView: View {
-    @State private var selectedRoute: WebRoute?
+    let openRoute: (WebRoute) -> Void
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     Button {
-                        selectedRoute = .ieltsAccount
+                        openRoute(.ieltsAccount)
                     } label: {
                         Label("Open account", systemImage: "person.crop.circle")
                             .frame(minHeight: 44)
@@ -354,9 +369,6 @@ private struct ProfileView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Profile")
-            .fullScreenCover(item: $selectedRoute) { route in
-                WebModuleView(route: route)
-            }
         }
     }
 }

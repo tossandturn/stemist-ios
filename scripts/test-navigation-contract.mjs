@@ -77,6 +77,34 @@ assert.match(
   'normal mode must explicitly guard a restored Profile selection'
 )
 assert.match(contentView, /onChange\(of:\s*selectedTab/, 'tab selection normalization must also handle state restoration')
+assert.equal(
+  (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
+  1,
+  'all native and deep-link routes must share one stable root web-module presenter'
+)
+assert.doesNotMatch(
+  contentView,
+  /@State\s+private\s+var\s+selectedRoute/,
+  'tab-local presentation state races with TabView and List transitions on iPad'
+)
+assert.match(
+  contentView,
+  /@State\s+private\s+var\s+activeWebLaunch:\s*WebRouteLaunch\?/
+)
+assert.match(
+  contentView,
+  /@State\s+private\s+var\s+pendingWebLaunch:\s*WebRouteLaunch\?/
+)
+assert.match(
+  contentView,
+  /fullScreenCover\(item:\s*\$activeWebLaunch,\s*onDismiss:\s*presentPendingWebLaunch\)/,
+  'the root presenter must serialize a route received while another module is dismissing'
+)
+assert.match(
+  contentView,
+  /let\s+openRoute:\s*\(WebRoute\)\s*->\s*Void/,
+  'tab content must report typed route intent to the root presenter'
+)
 assert.match(packageSwift, /\.iOS\("17\.0"\)/, 'the app should support iPadOS 17 and newer')
 assert.doesNotMatch(packageSwift, /\.iOS\("18\.6"\)/, 'the deployment target must not require the newest iPadOS')
 assert.match(
@@ -185,12 +213,12 @@ assert.match(contentView, /fullScreenCover\(item:/, 'learning workspaces must op
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,
-  /Button\s*\{\s*selectedRoute\s*=\s*\.stemNotebook[\s\S]{0,800}?\.accessibilityIdentifier\("open-stem-notebook"\)/,
+  /Button\s*\{\s*openRoute\(\.stemNotebook\)[\s\S]{0,800}?\.accessibilityIdentifier\("open-stem-notebook"\)/,
   'the Notebook entry needs a stable native test identifier'
 )
 
 assert.match(contentView, /enum WebRoute\s*:/, 'ContentView must define typed web routes')
-assert.match(contentView, /selectedRoute\s*=\s*\.aiCoach/, 'Today must expose the unified AI Coach entry')
+assert.match(contentView, /openRoute\(\.aiCoach\)/, 'Today must expose the unified AI Coach entry')
 for (const route of [
   'ieltsListening',
   'ieltsReading',
