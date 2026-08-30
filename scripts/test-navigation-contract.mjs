@@ -13,6 +13,7 @@ const cachedManifestPath = 'Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.
 const shellUITestPath = 'Stemist.swiftpm/Tests/StemistShellUITests/StemistShellUITests.swift'
 const xcodeProjectPath = 'StemistUITests.xcodeproj/project.pbxproj'
 const xcodeSchemePath = 'StemistUITests.xcodeproj/xcshareddata/xcschemes/StemistShellUITests.xcscheme'
+const appSchemePath = 'StemistUITests.xcodeproj/xcshareddata/xcschemes/Stemist.xcscheme'
 
 assert.ok(
   !fs.existsSync(cachedManifestPath),
@@ -28,8 +29,13 @@ assert.ok(
   fs.existsSync(xcodeSchemePath),
   'the real UI-test target needs a shared scheme for reproducible macOS CI runs'
 )
+assert.ok(
+  fs.existsSync(appSchemePath),
+  'the Xcode app target needs its own shared scheme for student and QA artifact builds'
+)
 const xcodeProject = fs.readFileSync(xcodeProjectPath, 'utf8')
 const xcodeScheme = fs.readFileSync(xcodeSchemePath, 'utf8')
+const appScheme = fs.readFileSync(appSchemePath, 'utf8')
 
 assert.ok(
   fs.existsSync('Stemist.swiftpm/AppRuntimeConfiguration.swift'),
@@ -285,6 +291,7 @@ assert.match(
 )
 assert.match(xcodeScheme, /BlueprintName = "Stemist"/, 'the shared test scheme must build Stemist')
 assert.match(xcodeScheme, /BlueprintName = "StemistShellUITests"/, 'the shared test scheme must execute the UI suite')
+assert.match(appScheme, /BlueprintName = "Stemist"/, 'the shared app scheme must build the student artifact target')
 assert.ok(fs.existsSync(shellUITestPath), 'the native shell UI suite must exist')
 const shellUITests = fs.readFileSync(shellUITestPath, 'utf8')
 assert.match(shellUITests, /XCUIApplication/, 'the shell suite must launch the real app')
