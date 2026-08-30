@@ -102,6 +102,11 @@ assert.match(
   /\.task\(id:\s*routeCoordinator\.pendingURL\)[\s\S]{0,260}?consumePendingExternalURL\(\)/,
   'cold-launch route consumption must react to the retained URL after the root is mounted'
 )
+assert.match(
+  contentView,
+  /\.onAppear\s*\{[\s\S]{0,220}?normalizeSelectedTab\(\)[\s\S]{0,220}?consumePendingExternalURL\(\)/,
+  'cold-launch URL contexts received before SwiftUI observation must be consumed again when the root appears'
+)
 assert.doesNotMatch(
   contentView,
   /scenePhase|schedulePendingExternalURLConsumption/,
@@ -141,7 +146,7 @@ assert.match(
   'the underlying student shell must not accept touches or VoiceOver focus while a workspace is open'
 )
 assert.match(contentView, /WebWorkspaceHost\([\s\S]{0,600}?retainedLaunch:\s*retainedWebLaunch[\s\S]{0,300}?isPresented:\s*activeWebLaunch\s*!=\s*nil/, 'the root must keep one resident route while controlling visibility separately')
-assert.match(contentView, /private\s+struct\s+WebWorkspaceHost[\s\S]{0,900}?if\s+let\s+launch\s*=\s*retainedLaunch[\s\S]{0,500}?WebModuleView\(\s*launch:\s*launch[\s\S]{0,700}?opacity\(isPresented\s*\?\s*1\s*:\s*0\)/, 'the WebView must be created only after the first valid route and remain hidden after close')
+assert.match(contentView, /private\s+struct\s+WebWorkspaceHost[\s\S]{0,900}?if\s+let\s+launch\s*=\s*retainedLaunch[\s\S]{0,700}?WebModuleView\(\s*launch:\s*launch[\s\S]{0,500}?isWorkspacePresented:\s*isPresented[\s\S]{0,700}?opacity\(isPresented\s*\?\s*1\s*:\s*0\)/, 'the WebView must be created only after the first valid route and remain hidden after close')
 assert.doesNotMatch(contentView, /private\s+struct\s+WebWorkspaceHost[\s\S]{0,1800}?WebRouteLaunch\(route:\s*\.stemHome\)/, 'a hidden resident workspace must not load a fallback product route')
 assert.doesNotMatch(
   contentView,
@@ -153,6 +158,21 @@ assert.match(
   webModule,
   /@Binding\s+private\s+var\s+presentedLaunch:\s*WebRouteLaunch\?/,
   'the web module must be able to clear its root presentation item'
+)
+assert.match(
+  webModule,
+  /let\s+isWorkspacePresented:\s*Bool/,
+  'the retained web module must receive explicit presentation state instead of relying on SwiftUI opacity only'
+)
+assert.match(
+  webModule,
+  /EmbeddedWebView\([\s\S]{0,700}?accessibilityIdentifier:\s*"web-module-\\\(route\.id\)"[\s\S]{0,700}?isPresented:\s*isWorkspacePresented/,
+  'the actual WKWebView must receive the dynamic route identifier and presentation state'
+)
+assert.match(
+  webModule,
+  /webView\.accessibilityIdentifier\s*=\s*parent\.accessibilityIdentifier[\s\S]{0,500}?webView\.isHidden\s*=\s*!parent\.isPresented[\s\S]{0,500}?webView\.accessibilityElementsHidden\s*=\s*!parent\.isPresented/,
+  'hiding the retained workspace must hide the real WKWebView from XCTest and accessibility'
 )
 assert.doesNotMatch(
   webModule,

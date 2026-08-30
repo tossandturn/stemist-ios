@@ -150,6 +150,7 @@ struct ContentView: View {
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .onAppear {
             normalizeSelectedTab()
+            consumePendingExternalURL()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
@@ -172,6 +173,7 @@ private struct WebWorkspaceHost: View {
             if let launch = retainedLaunch {
                 WebModuleView(
                     launch: launch,
+                    isWorkspacePresented: isPresented,
                     presentedLaunch: $presentedLaunch,
                     requestLaunch: requestLaunch
                 )

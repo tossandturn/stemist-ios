@@ -260,6 +260,7 @@ struct WebModuleView: View {
     let route: WebRoute
     let launchURL: URL
     let requestLaunch: (WebRouteLaunch) -> Void
+    let isWorkspacePresented: Bool
     @Binding private var presentedLaunch: WebRouteLaunch?
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
@@ -275,12 +276,14 @@ struct WebModuleView: View {
         self.route = route
         launchURL = route.url
         requestLaunch = { _ in }
+        isWorkspacePresented = true
         _presentedLaunch = .constant(nil)
     }
 
     init(launch: WebRouteLaunch) {
         self.init(
             launch: launch,
+            isWorkspacePresented: true,
             presentedLaunch: .constant(nil),
             requestLaunch: { _ in }
         )
@@ -292,6 +295,7 @@ struct WebModuleView: View {
     ) {
         self.init(
             launch: launch,
+            isWorkspacePresented: true,
             presentedLaunch: presentedLaunch,
             requestLaunch: { _ in }
         )
@@ -299,12 +303,14 @@ struct WebModuleView: View {
 
     init(
         launch: WebRouteLaunch,
+        isWorkspacePresented: Bool,
         presentedLaunch: Binding<WebRouteLaunch?>,
         requestLaunch: @escaping (WebRouteLaunch) -> Void
     ) {
         route = launch.route
         launchURL = launch.url
         self.requestLaunch = requestLaunch
+        self.isWorkspacePresented = isWorkspacePresented
         _presentedLaunch = presentedLaunch
     }
 
@@ -329,6 +335,8 @@ struct WebModuleView: View {
                     currentURL: $currentURL,
                     allowsAccountEntry: allowsAccountEntry,
                     opensCoachOnLoad: route.opensCoachOnLoad,
+                    accessibilityIdentifier: "web-module-\(route.id)",
+                    isPresented: isWorkspacePresented,
                     loadWatchdogToken: $loadWatchdogToken
                 )
 
@@ -464,6 +472,8 @@ struct EmbeddedWebView: UIViewRepresentable {
     @Binding var currentURL: URL?
     let allowsAccountEntry: Bool
     let opensCoachOnLoad: Bool
+    let accessibilityIdentifier: String
+    let isPresented: Bool
     @Binding var loadWatchdogToken: UUID
 
     func makeUIView(context: Context) -> WKWebView {
@@ -495,6 +505,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.scrollView.keyboardDismissMode = .interactive
         configureInputGestures(for: webView)
         store.webView = webView
+        context.coordinator.applyPresentationState(webView)
         context.coordinator.load(url, in: webView)
         return webView
     }
@@ -512,6 +523,7 @@ struct EmbeddedWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.store = store
+        context.coordinator.applyPresentationState(webView)
         context.coordinator.updateNavigationState(webView)
         guard context.coordinator.requestedURL != url else { return }
         context.coordinator.load(url, in: webView)
@@ -545,6 +557,14 @@ struct EmbeddedWebView: UIViewRepresentable {
                 CoachAutoOpenScript.open,
                 completionHandler: nil
             )
+        }
+
+        func applyPresentationState(_ webView: WKWebView) {
+            webView.accessibilityIdentifier = parent.accessibilityIdentifier
+            webView.isHidden = !parent.isPresented
+            webView.isUserInteractionEnabled = parent.isPresented
+            webView.accessibilityElementsHidden = !parent.isPresented
+            webView.scrollView.accessibilityElementsHidden = !parent.isPresented
         }
 
         func load(_ url: URL, in webView: WKWebView) {
