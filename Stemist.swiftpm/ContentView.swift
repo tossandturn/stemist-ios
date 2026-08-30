@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if DEBUG
+import os
+#endif
+
 enum AppTab: Hashable {
     case today
     case ielts
@@ -12,12 +16,32 @@ enum AppTab: Hashable {
 final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
     @Published private(set) var isPresented = false
+    #if DEBUG
+    @Published private(set) var debugSnapshot = "0 init"
+    private var debugSequence = 0
+    private let debugLog = Logger(subsystem: "com.ieltsist.stemist", category: "workspace")
+    #endif
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
 
+    #if DEBUG
+    private func record(_ event: String) {
+        debugSequence += 1
+        let active = activeLaunch?.route.id ?? "nil"
+        let pending = pendingLaunch?.route.id ?? "nil"
+        debugSnapshot = "\(debugSequence) \(event) active=\(active) pending=\(pending) presented=\(isPresented) dismissing=\(isDismissing)"
+        debugLog.debug("\(self.debugSnapshot, privacy: .public)")
+        print("[StemistWorkspace] \(debugSnapshot)")
+    }
+    #else
+    private func record(_ event: String) {}
+    #endif
+
     func present(_ launch: WebRouteLaunch) {
+        record("present(\(launch.route.id))")
         if isDismissing {
             pendingLaunch = launch
+            record("buffered(\(launch.route.id))")
             return
         }
 
@@ -27,21 +51,26 @@ final class WebWorkspaceCoordinator: ObservableObject {
             // when a module requests another module (for example account).
             guard activeLaunch?.id != launch.id else { return }
             activeLaunch = launch
+            record("replaced(\(launch.route.id))")
             return
         }
 
         pendingLaunch = nil
         activeLaunch = launch
         isPresented = true
+        record("presented(\(launch.route.id))")
     }
 
     func dismiss() {
+        record("dismiss()")
         guard activeLaunch != nil, isPresented, !isDismissing else { return }
         isDismissing = true
         isPresented = false
+        record("dismiss-requested")
     }
 
     func setPresented(_ presented: Bool) {
+        record("setPresented(\(presented))")
         // The coordinator owns presentation. SwiftUI can write `false` for a
         // swipe/system dismissal; a stale `true` must never resurrect content.
         guard !presented else { return }
@@ -49,6 +78,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     }
 
     func completeDismissal() {
+        record("completeDismissal()")
         guard isDismissing || !isPresented else { return }
 
         // `onDismiss` is the presentation system's settled boundary. Do not
@@ -57,11 +87,13 @@ final class WebWorkspaceCoordinator: ObservableObject {
         isDismissing = false
         isPresented = false
         activeLaunch = nil
+        record("dismissed")
 
         guard let pendingLaunch else { return }
         self.pendingLaunch = nil
         activeLaunch = pendingLaunch
         isPresented = true
+        record("replayed(\(pendingLaunch.route.id))")
     }
 
     func hasPresented(_ launch: WebRouteLaunch) -> Bool {
@@ -90,8 +122,20 @@ private struct WebWorkspaceHost: View {
             }
         }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
+        #if DEBUG
+        .onAppear { workspace.recordHostEvent("host-appear") }
+        .onDisappear { workspace.recordHostEvent("host-disappear") }
+        #endif
     }
 }
+
+#if DEBUG
+private extension WebWorkspaceCoordinator {
+    func recordHostEvent(_ event: String) {
+        record(event)
+    }
+}
+#endif
 
 @MainActor
 struct ContentView: View {
@@ -247,6 +291,18 @@ struct ContentView: View {
         .task(id: routeCoordinator.pendingURL) {
             schedulePendingExternalURLConsumption()
         }
+#if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text(webWorkspace.debugSnapshot)
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("workspace-debug")
+                .accessibilityLabel(webWorkspace.debugSnapshot)
+        }
+#endif
         .accessibilityIdentifier("stemist-root")
     }
 }
