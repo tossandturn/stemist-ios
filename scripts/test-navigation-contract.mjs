@@ -156,8 +156,8 @@ assert.match(
 )
 assert.match(
   contentView,
-  /var\s+isPresented:\s*Bool\s*\{\s*activeLaunch\s*!=\s*nil\s*\}/,
-  'presentation state must be derived from the active route item'
+  /@Published\s+private\(set\)\s+var\s+isPresented\s*=\s*false/,
+  'the coordinator must expose a dedicated native presenter state'
 )
 assert.match(
   contentView,
@@ -176,7 +176,7 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,220}?if\s+isDismissing\s*\{[\s\S]{0,120}?pendingLaunch\s*=\s*launch/,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,700}?isDismissing\s*\|\|\s*!isPresented[\s\S]{0,900}?pendingLaunch\s*=\s*launch/,
   'a route requested during dismissal must be buffered'
 )
 assert.match(
@@ -186,12 +186,12 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+dismiss\(\)[\s\S]{0,260}?isDismissing\s*=\s*true[\s\S]{0,240}?activeLaunch\s*=\s*nil/,
+  /func\s+dismiss\(\)[\s\S]{0,520}?isDismissing\s*=\s*true[\s\S]{0,520}?isPresented\s*=\s*false/,
   'the workspace must explicitly request dismissal through its state machine'
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,1400}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,500}?activeLaunch\s*=\s*replay/,
+  /func\s+completeDismissal\(\)[\s\S]{0,1400}?isPresented\s*=\s*false[\s\S]{0,500}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,600}?activeLaunch\s*=\s*replay[\s\S]{0,160}?isPresented\s*=\s*true/,
   'the settled dismissal callback must replay the latest buffered route after the presenter settles'
 )
 assert.match(
@@ -201,8 +201,8 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+setActiveLaunch\(_\s+launch:\s*WebRouteLaunch\?\)[\s\S]{0,500}?present\(launch\)[\s\S]{0,300}?dismiss\(\)/,
-  'the item binding must route system writes through the coordinator'
+  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,260}?guard\s+!presented\s+else\s*\{\s*return\s*\}[\s\S]{0,300}?isDismissing\s*=\s*true[\s\S]{0,180}?isPresented\s*=\s*false/,
+  'the native binding must only accept system dismissal writes'
 )
 assert.doesNotMatch(
   contentView,
@@ -211,13 +211,13 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /\.fullScreenCover\([\s\S]{0,260}?item:\s*workspacePresentation[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?launch\s+in\s+WebWorkspaceHost\([\s\S]{0,360}?launch:\s*launch/,
-  'the root must use one native item presenter and render the selected workspace route'
+  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*workspacePresentation[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
+  'the root must use one native boolean presenter and render the resident workspace route'
 )
 assert.match(
   contentView,
-  /private\s+var\s+workspacePresentation:\s*Binding<WebRouteLaunch\?>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.activeLaunch\s*\}[\s\S]{0,220}?set:\s*\{\s*webWorkspace\.setActiveLaunch\(\$0\)\s*\}/,
-  'the coordinator must directly own the single native item presenter binding'
+  /private\s+var\s+workspacePresentation:\s*Binding<Bool>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.isPresented\s*\}[\s\S]{0,260}?set:\s*\{\s*value\s+in\s+webWorkspace\.setPresented\(value\)\s*\}/,
+  'the coordinator must directly own the single native boolean presenter binding'
 )
 assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(
