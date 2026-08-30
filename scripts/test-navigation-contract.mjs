@@ -252,6 +252,17 @@ assert.match(
 assert.match(infoPlist, /CFBundleURLTypes/, 'Info.plist must declare URL types')
 assert.match(infoPlist, /CFBundleURLSchemes/, 'Info.plist must declare URL schemes')
 assert.match(infoPlist, /<string>stemist<\/string>/, 'Info.plist must register the stemist scheme')
+for (const privacyKey of [
+  'NSMicrophoneUsageDescription',
+  'NSCameraUsageDescription',
+  'NSPhotoLibraryUsageDescription',
+]) {
+  assert.match(
+    infoPlist,
+    new RegExp(`<key>${privacyKey}<\\/key>\\s*<string>[^<]+<\\/string>`),
+    `the checked-in Info.plist must contain ${privacyKey} for the Xcode app target`
+  )
+}
 assert.match(
   infoPlist,
   /<key>STEMIST_FULL_FEATURE_TEST<\/key>\s*<string>\$\(STEMIST_FULL_FEATURE_TEST\)<\/string>/,

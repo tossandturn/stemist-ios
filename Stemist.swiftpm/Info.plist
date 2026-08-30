@@ -6,6 +6,12 @@
 	<string>Stemist</string>
 	<key>CFBundleName</key>
 	<string>Stemist</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Use the microphone for IELTS speaking practice and voice feedback.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Use the camera to capture handwritten STEM work for marking.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose handwritten work and source files from your photo library.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
