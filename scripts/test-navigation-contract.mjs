@@ -10,7 +10,7 @@ const gitignore = fs.readFileSync('.gitignore', 'utf8')
 const infoPlistPath = 'Stemist.swiftpm/Info.plist'
 const githubWorkflowPath = '.github/workflows/ios-simulator.yml'
 const cachedManifestPath = 'Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.plist'
-const shellUITestPath = 'Tests/StemistShellUITests/StemistShellUITests.swift'
+const shellUITestPath = 'Stemist.swiftpm/Tests/StemistShellUITests/StemistShellUITests.swift'
 
 assert.ok(
   !fs.existsSync(cachedManifestPath),
@@ -238,7 +238,12 @@ assert.match(
   /#if\s+!SwiftPlaygrounds\s+&&\s+!canImport\(PlaygroundSupport\)/,
   'the Xcode-only UI test target must not be included in Swift Playgrounds'
 )
-assert.match(packageSwift, /\.testTarget\(\s*name:\s*"StemistShellUITests"/, 'the native shell UI suite needs a dedicated test target')
+assert.match(
+  packageSwift,
+  /\.testTarget\([\s\S]*?name:\s*"StemistShellUITests"[\s\S]*?path:\s*"Tests\/StemistShellUITests"/,
+  'the native shell UI target must remain inside the Swift package root'
+)
+assert.doesNotMatch(packageSwift, /path:\s*"\.\.\/Tests\/StemistShellUITests"/, 'the native shell UI target must not escape the Swift package root')
 assert.ok(fs.existsSync(shellUITestPath), 'the native shell UI suite must exist')
 const shellUITests = fs.readFileSync(shellUITestPath, 'utf8')
 assert.match(shellUITests, /XCUIApplication/, 'the shell suite must launch the real app')
@@ -419,6 +424,16 @@ assert.match(githubWorkflow, /runs-on:\s*macos-15/, 'macOS CI must use the macOS
 assert.match(githubWorkflow, /DEVELOPER_DIR:\s*\/Applications\/Xcode_16\.4\.app\/Contents\/Developer/, 'macOS CI must select Xcode 16.4 for XCUIApplication deep links')
 assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must compile the iOS Simulator product')
 assert.match(githubWorkflow, /xcodebuild test/, 'macOS CI must run native shell UI tests')
+assert.match(
+  githubWorkflow,
+  /set \+e[\s\S]*?cd "\$GITHUB_WORKSPACE\/Stemist\.swiftpm"[\s\S]*?xcodebuild test[\s\S]*?STEMIST_FULL_FEATURE_TEST=NO/,
+  'macOS CI must enter the Swift package directory before the student UI test'
+)
+assert.match(
+  githubWorkflow,
+  /STUDENT_UI_TEST_STATUS=\$\{PIPESTATUS\[0\]\}[\s\S]*?cd "\$GITHUB_WORKSPACE\/Stemist\.swiftpm"[\s\S]*?xcodebuild test[\s\S]*?STEMIST_FULL_FEATURE_TEST=YES/,
+  'macOS CI must enter the Swift package directory before the QA UI test'
+)
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=NO/, 'macOS CI must run the student UI test mode')
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must run the QA UI test mode')
 assert.match(githubWorkflow, /student-shell-ui-tests\.log/, 'macOS CI must retain the student UI test log')

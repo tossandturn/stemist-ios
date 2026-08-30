@@ -129,6 +129,7 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           UI_TEST_STATUS=0
           set +e
+          cd "$GITHUB_WORKSPACE/Stemist.swiftpm"
           xcodebuild test \
             -scheme Stemist \
             -sdk iphonesimulator \
@@ -141,6 +142,7 @@ jobs:
             -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildHidesAccountEntryAndKeepsLearningSpacesNavigable \
             2>&1 | tee "$GITHUB_WORKSPACE/build/ios/student-shell-ui-tests.log"
           STUDENT_UI_TEST_STATUS=${PIPESTATUS[0]}
+          cd "$GITHUB_WORKSPACE/Stemist.swiftpm"
           xcodebuild test \
             -scheme Stemist \
             -sdk iphonesimulator \

@@ -22,7 +22,7 @@ targets.append(
     .testTarget(
         name: "StemistShellUITests",
         dependencies: ["AppModule"],
-        path: "../Tests/StemistShellUITests"
+        path: "Tests/StemistShellUITests"
     )
 )
 #endif
