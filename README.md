@@ -41,7 +41,7 @@ When a product page opens a JavaScript alert, confirm or prompt, the shell prese
 
 The Windows checkout cannot compile Swift locally. A successful Codemagic `xcodebuild` step and its generated app metadata check are required before treating the iOS package as buildable.
 
-Both cloud workflows create two disposable iPad Simulator builds: a normal student build and an internal QA build with the bundle setting `STEMIST_FULL_FEATURE_TEST=YES`. They install and launch both, retain screenshots, and follow the QA launch with the otherwise hidden account deep link. This proves the native shell starts in both configurations and that the account route is available only to the QA build; signed TestFlight installation and the authenticated, Apple Pencil, camera, microphone, upload and AI journeys still require the real-iPad acceptance matrix below.
+Both cloud workflows create two disposable iPad Simulator builds: a normal student build and an internal QA build with the bundle setting `STEMIST_FULL_FEATURE_TEST=YES`. They install and launch both, retain screenshots, then request the otherwise hidden account custom scheme from the QA app. iOS presents its own "Open in Stemist?" confirmation, which is retained as scheme-registration evidence rather than misreported as a completed account journey. The tester completes that confirmation and the authenticated, Apple Pencil, camera, microphone, upload and AI journeys on a real iPad using the [acceptance matrix](docs/ios-ipad-acceptance-matrix.md).
 
 The package deployment target is iPadOS/iOS 17.0 or newer. The native shell keeps the account tab hidden in student mode, while the existing web authentication remains available inside product flows.
 

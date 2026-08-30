@@ -138,7 +138,7 @@ jobs:
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/ios/full-feature-test-mode.png"
           xcrun simctl openurl "$SIMULATOR_UDID" "stemist://open/ielts-account"
           sleep 2
-          xcrun simctl io "$SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/ios/full-feature-account-route.png"
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/ios/full-feature-custom-scheme-confirmation.png"
 
       - name: Upload simulator build evidence
         uses: actions/upload-artifact@v4
@@ -151,4 +151,4 @@ jobs:
             build/ios-qa/xcodebuild.log
             build/ios/normal-mode.png
             build/ios/full-feature-test-mode.png
-            build/ios/full-feature-account-route.png
+            build/ios/full-feature-custom-scheme-confirmation.png

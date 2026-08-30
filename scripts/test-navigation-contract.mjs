@@ -422,7 +422,12 @@ for (const [workflowName, workflow] of [
   assert.match(
     workflow,
     /xcrun simctl openurl[\s\S]*?stemist:\/\/open\/ielts-account/,
-    `${workflowName} must exercise the otherwise hidden account route only after full-function QA launch`
+    `${workflowName} must request the QA account custom scheme to verify its system registration`
+  )
+  assert.match(
+    workflow,
+    /full-feature-custom-scheme-confirmation\.png/,
+    `${workflowName} must retain the iOS custom-scheme confirmation as smoke-test evidence`
   )
   assert.ok(
     (workflow.match(/xcrun simctl launch/g) ?? []).length >= 2,
