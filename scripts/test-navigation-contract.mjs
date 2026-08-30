@@ -363,6 +363,26 @@ assert.doesNotMatch(
 )
 assert.match(shellUITests, /XCUIScreen\.main\.screenshot\(\)/, 'UI tests must retain rendered iPad evidence instead of relying on fixed sleeps')
 assert.match(shellUITests, /attachment\.lifetime = \.keepAlways/, 'route evidence must survive successful CI test runs')
+assert.match(
+  shellUITests,
+  /private func waitUntilHittable\([\s\S]*?exists == true AND hittable == true[\s\S]*?XCTNSPredicateExpectation/,
+  'route tests must wait for controls to become hittable after tab and cover transitions'
+)
+assert.match(
+  shellUITests,
+  /private func openAndCloseRoute[\s\S]*?waitUntilHittable\(routeButton[\s\S]*?routeButton\.tap\(\)/,
+  'route tests must not tap a control while a prior presentation is still dismissing'
+)
+assert.match(
+  shellUITests,
+  /module\.waitForNonExistence\(timeout:/,
+  'route tests must wait for full-screen modules to finish dismissing'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /XCTAssertFalse\(\s*module\.waitForExistence\(/,
+  'waitForExistence returns immediately for an existing module and cannot wait for dismissal'
+)
 for (const [buttonIdentifier, moduleIdentifier] of [
   ['route-ielts-listening', 'web-module-ielts-listening'],
   ['route-ielts-reading', 'web-module-ielts-reading'],

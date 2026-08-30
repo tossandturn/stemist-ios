@@ -81,7 +81,7 @@ final class StemistShellUITests: XCTestCase {
 
         selectTab("Today")
         let notebookEntry = app.buttons["open-notebook"]
-        XCTAssertTrue(notebookEntry.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitUntilHittable(notebookEntry))
         notebookEntry.tap()
         openAndCloseRoute(
             buttonIdentifier: "open-stem-notebook",
@@ -99,6 +99,7 @@ final class StemistShellUITests: XCTestCase {
             moduleIdentifier: "web-module-ielts-account"
         )
 
+        XCTAssertTrue(waitUntilHittable(app.buttons["route-ielts-account"]))
         app.open(accountURL)
         let accountModule = webModule("web-module-ielts-account")
         XCTAssertTrue(accountModule.waitForExistence(timeout: 3))
@@ -145,7 +146,7 @@ final class StemistShellUITests: XCTestCase {
 
         selectTab("Today")
         let notebookEntry = app.buttons["open-notebook"]
-        XCTAssertTrue(notebookEntry.waitForExistence(timeout: 3))
+        XCTAssertTrue(waitUntilHittable(notebookEntry))
         notebookEntry.tap()
         openAndCloseRoute(
             buttonIdentifier: "open-stem-notebook",
@@ -163,8 +164,8 @@ final class StemistShellUITests: XCTestCase {
 
     private func selectTab(_ visibleLabel: String) {
         let tab = tabButton(visibleLabel)
-        guard tab.waitForExistence(timeout: 3) else {
-            XCTFail("Expected tab \(visibleLabel) to be available.\n\n\(app.debugDescription)")
+        guard waitUntilHittable(tab) else {
+            XCTFail("Expected tab \(visibleLabel) to be available and hittable.\n\n\(app.debugDescription)")
             return
         }
         tab.tap()
@@ -178,10 +179,13 @@ final class StemistShellUITests: XCTestCase {
 
     private func assertDashboardLearningSpace(_ identifier: String, exposesRoute routeIdentifier: String) {
         let learningSpace = app.buttons[identifier]
-        XCTAssertTrue(learningSpace.waitForExistence(timeout: 3), "Expected \(identifier) to be available")
-        guard learningSpace.exists else { return }
+        XCTAssertTrue(waitUntilHittable(learningSpace), "Expected \(identifier) to be available and hittable")
+        guard learningSpace.exists, learningSpace.isHittable else { return }
         learningSpace.tap()
-        XCTAssertTrue(app.buttons[routeIdentifier].waitForExistence(timeout: 3), "Expected \(identifier) to open its learning space")
+        XCTAssertTrue(
+            waitUntilHittable(app.buttons[routeIdentifier]),
+            "Expected \(identifier) to open its learning space"
+        )
     }
 
     private func exerciseRoutes(_ routes: [RouteExpectation]) {
@@ -197,8 +201,8 @@ final class StemistShellUITests: XCTestCase {
 
     private func openAndCloseRoute(buttonIdentifier: String, moduleIdentifier: String) {
         let routeButton = app.buttons[buttonIdentifier]
-        XCTAssertTrue(routeButton.waitForExistence(timeout: 3), "Expected \(buttonIdentifier) to be available")
-        guard routeButton.exists else { return }
+        XCTAssertTrue(waitUntilHittable(routeButton), "Expected \(buttonIdentifier) to be available and hittable")
+        guard routeButton.exists, routeButton.isHittable else { return }
         routeButton.tap()
 
         let module = webModule(moduleIdentifier)
@@ -217,14 +221,20 @@ final class StemistShellUITests: XCTestCase {
         app.webViews[identifier]
     }
 
+    private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval = 3) -> Bool {
+        let predicate = NSPredicate(format: "exists == true AND hittable == true")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     private func closeWebModule(_ module: XCUIElement, named moduleIdentifier: String) {
         guard module.exists else { return }
 
         let closeButton = app.buttons["web-close"]
-        XCTAssertTrue(closeButton.waitForExistence(timeout: 3), "Expected \(moduleIdentifier) to expose a close control")
-        guard closeButton.exists else { return }
+        XCTAssertTrue(waitUntilHittable(closeButton), "Expected \(moduleIdentifier) to expose a close control")
+        guard closeButton.exists, closeButton.isHittable else { return }
         closeButton.tap()
-        XCTAssertFalse(module.waitForExistence(timeout: 2), "Expected \(moduleIdentifier) to close")
+        XCTAssertTrue(module.waitForNonExistence(timeout: 3), "Expected \(moduleIdentifier) to close")
     }
 
     private func attachScreenshot(named name: String) {
