@@ -177,8 +177,8 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,1100}?activeLaunch\s*=\s*nil[\s\S]{0,500}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,300}?activeLaunch\s*=\s*pendingLaunch[\s\S]{0,220}?isPresented\s*=\s*true/,
-  'the settled dismissal callback must atomically replay the latest buffered route'
+  /func\s+completeDismissal\(\)[\s\S]{0,1400}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,500}?activeLaunch\s*=\s*(?:pendingLaunch|replay)[\s\S]{0,260}?isPresented\s*=\s*true/,
+  'the settled dismissal callback must replay the latest buffered route after the presenter settles'
 )
 assert.match(
   contentView,
@@ -192,18 +192,13 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*\$isWorkspacePresented[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
+  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*(?:\$isWorkspacePresented|workspacePresentation)[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
   'the root must keep one native boolean presenter and render the coordinator-owned workspace'
 )
 assert.match(
   contentView,
-  /onChange\(of:\s*webWorkspace\.isPresented\)[\s\S]{0,260}?isWorkspacePresented\s*=\s*desiredPresentation/,
-  'coordinator presentation state must drive the native presenter binding'
-)
-assert.match(
-  contentView,
-  /onChange\(of:\s*isWorkspacePresented\)[\s\S]{0,260}?webWorkspace\.setPresented\(false\)/,
-  'system dismissal must be forwarded back to the coordinator'
+  /private\s+var\s+workspacePresentation:\s*Binding<Bool>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.isPresented\s*\}[\s\S]{0,220}?set:\s*\{\s*webWorkspace\.setPresented\(\$0\)\s*\}/,
+  'the coordinator must directly own the single native presenter binding'
 )
 assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(

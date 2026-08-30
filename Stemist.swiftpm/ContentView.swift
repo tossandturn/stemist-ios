@@ -91,9 +91,17 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
         guard let pendingLaunch else { return }
         self.pendingLaunch = nil
-        activeLaunch = pendingLaunch
-        isPresented = true
-        record("replayed(\(pendingLaunch.route.id))")
+        let replay = pendingLaunch
+        Task { @MainActor [weak self] in
+            // Give SwiftUI one settled run-loop turn after onDismiss before
+            // asking the same presenter to mount its next resident module.
+            await Task.yield()
+            guard let self, !self.isDismissing, !self.isPresented,
+                  self.activeLaunch == nil else { return }
+            self.activeLaunch = replay
+            self.isPresented = true
+            self.record("replayed(\(replay.route.id))")
+        }
     }
 
     func hasPresented(_ launch: WebRouteLaunch) -> Bool {
@@ -143,7 +151,6 @@ struct ContentView: View {
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
     @State private var rootIsReady = false
-    @State private var isWorkspacePresented = false
     @StateObject private var webWorkspace = WebWorkspaceCoordinator()
 
     init(
@@ -166,6 +173,13 @@ struct ContentView: View {
 
     private func present(_ launch: WebRouteLaunch) {
         webWorkspace.present(launch)
+    }
+
+    private var workspacePresentation: Binding<Bool> {
+        Binding(
+            get: { webWorkspace.isPresented },
+            set: { webWorkspace.setPresented($0) }
+        )
     }
 
     private func consumePendingExternalURL() {
@@ -257,7 +271,7 @@ struct ContentView: View {
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .fullScreenCover(
-            isPresented: $isWorkspacePresented,
+            isPresented: workspacePresentation,
             onDismiss: { webWorkspace.completeDismissal() }
         ) {
             WebWorkspaceHost(
@@ -275,33 +289,16 @@ struct ContentView: View {
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
-        .onChange(of: webWorkspace.isPresented) { _, desiredPresentation in
-            guard isWorkspacePresented != desiredPresentation else { return }
-            isWorkspacePresented = desiredPresentation
-        }
         .onChange(of: webWorkspace.activeLaunch?.id) { _, _ in
             // A deep link can arrive while the previous module is closing.
             // Re-check it when the coordinator replays the buffered route.
             schedulePendingExternalURLConsumption()
         }
-        .onChange(of: isWorkspacePresented) { _, presented in
-            guard !presented, webWorkspace.isPresented else { return }
-            webWorkspace.setPresented(false)
-        }
         .task(id: routeCoordinator.pendingURL) {
             schedulePendingExternalURLConsumption()
         }
 #if DEBUG
-        .overlay(alignment: .topLeading) {
-            Text(webWorkspace.debugSnapshot)
-                .font(.system(size: 1))
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .opacity(0.01)
-                .accessibilityElement(children: .ignore)
-                .accessibilityIdentifier("workspace-debug")
-                .accessibilityLabel(webWorkspace.debugSnapshot)
-        }
+        .accessibilityValue(webWorkspace.debugSnapshot)
 #endif
         .accessibilityIdentifier("stemist-root")
     }
