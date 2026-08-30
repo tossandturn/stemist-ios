@@ -161,9 +161,9 @@ struct ContentView: View {
         ZStack {
             TabView(selection: $selectedTab) {
                 DashboardView(selectedTab: $selectedTab, openRoute: present)
-                    .tabItem { Label("Today", systemImage: "house").accessibilityIdentifier("tab-today") }
+                    .tabItem { Label("Today", systemImage: "house") }
                     .tag(AppTab.today)
-                    .accessibilityIdentifier("tab-today-content")
+                    .accessibilityIdentifier("tab-today")
 
                 ModuleHomeView(
                     title: "IELTS",
@@ -177,9 +177,9 @@ struct ContentView: View {
                     ],
                     openRoute: present
                 )
-                .tabItem { Label("IELTS", systemImage: "text.book.closed").accessibilityIdentifier("tab-ielts") }
+                .tabItem { Label("IELTS", systemImage: "text.book.closed") }
                 .tag(AppTab.ielts)
-                .accessibilityIdentifier("tab-ielts-content")
+                .accessibilityIdentifier("tab-ielts")
 
                 ModuleHomeView(
                     title: "STEM",
@@ -195,20 +195,20 @@ struct ContentView: View {
                     ],
                     openRoute: present
                 )
-                .tabItem { Label("STEM", systemImage: "atom").accessibilityIdentifier("tab-stem") }
+                .tabItem { Label("STEM", systemImage: "atom") }
                 .tag(AppTab.stem)
-                .accessibilityIdentifier("tab-stem-content")
+                .accessibilityIdentifier("tab-stem")
 
                 NotebookView(openRoute: present)
-                    .tabItem { Label("Notebook", systemImage: "square.and.pencil").accessibilityIdentifier("tab-notebook") }
+                    .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
                     .tag(AppTab.notebook)
-                    .accessibilityIdentifier("tab-notebook-content")
+                    .accessibilityIdentifier("tab-notebook")
 
                 if configuration.showsAccountEntry {
                     ProfileView(openRoute: present)
-                        .tabItem { Label("Profile", systemImage: "person").accessibilityIdentifier("tab-profile") }
+                        .tabItem { Label("Profile", systemImage: "person") }
                         .tag(AppTab.profile)
-                        .accessibilityIdentifier("tab-profile-content")
+                        .accessibilityIdentifier("tab-profile")
                 }
             }
             .allowsHitTesting(webWorkspace.activeLaunch == nil)
