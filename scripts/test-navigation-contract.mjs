@@ -114,8 +114,8 @@ assert.doesNotMatch(
 )
 assert.equal(
   (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
-  0,
-  'repeated learning routes must not depend on dismissing and immediately recreating a modal presenter'
+  1,
+  'learning routes must use one root-level full-screen presenter'
 )
 assert.doesNotMatch(
   contentView,
@@ -124,30 +124,40 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /@State\s+private\s+var\s+activeWebLaunch:\s*WebRouteLaunch\?/
-)
-assert.match(contentView, /@State\s+private\s+var\s+retainedWebLaunch:\s*WebRouteLaunch\?/, 'the resident workspace route must be separate from presentation visibility')
-assert.match(contentView, /@State\s+private\s+var\s+pendingWebLaunch:\s*WebRouteLaunch\?/, 'route requests during workspace handoff must have one pending slot')
-assert.match(contentView, /@State\s+private\s+var\s+isWebWorkspaceClosing\s*=\s*false/, 'workspace handoff must expose a short closing phase')
-assert.match(
-  contentView,
-  /private\s+func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,260}?isWebWorkspaceClosing[\s\S]{0,180}?pendingWebLaunch\s*=\s*launch/,
-  'a route requested during close must be buffered instead of dropped'
+  /@StateObject\s+private\s+var\s+webWorkspace\s*=\s*WebWorkspaceCoordinator\(\)/,
+  'the root must own one observable workspace coordinator'
 )
 assert.match(
   contentView,
-  /private\s+func\s+setActiveWebLaunch\(_\s+launch:\s*WebRouteLaunch\?\)[\s\S]{0,360}?isWebWorkspaceClosing\s*=\s*true[\s\S]{0,220}?activeWebLaunch\s*=\s*nil[\s\S]{0,700}?isWebWorkspaceClosing\s*=\s*false[\s\S]{0,500}?retainedWebLaunch\s*=\s*pendingWebLaunch[\s\S]{0,160}?activeWebLaunch\s*=\s*pendingWebLaunch/,
-  'the closing handoff must replay its pending route after hiding the resident workspace'
+  /@Published\s+private\(set\)\s+var\s+activeLaunch:\s*WebRouteLaunch\?/,
+  'the coordinator must expose only the active launch to SwiftUI'
 )
-assert.match(contentView, /private\s+func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,500}?retainedWebLaunch\s*=\s*launch[\s\S]{0,160}?activeWebLaunch\s*=\s*launch/, 'route replacement must update the retained workspace before making it visible')
 assert.match(
   contentView,
-  /TabView\(selection:\s*\$selectedTab\)[\s\S]{0,2600}?\.allowsHitTesting\(activeWebLaunch\s*==\s*nil\)[\s\S]{0,200}?\.accessibilityHidden\(activeWebLaunch\s*!=\s*nil\)/,
-  'the underlying student shell must not accept touches or VoiceOver focus while a workspace is open'
+  /private\s+var\s+pendingLaunch:\s*WebRouteLaunch\?/,
+  'route requests during dismissal must have one pending slot'
 )
-assert.match(contentView, /WebWorkspaceHost\([\s\S]{0,600}?retainedLaunch:\s*retainedWebLaunch[\s\S]{0,300}?isPresented:\s*activeWebLaunch\s*!=\s*nil/, 'the root must keep one resident route while controlling visibility separately')
-assert.match(contentView, /private\s+struct\s+WebWorkspaceHost[\s\S]{0,900}?if\s+let\s+launch\s*=\s*retainedLaunch[\s\S]{0,700}?WebModuleView\(\s*launch:\s*launch[\s\S]{0,500}?isWorkspacePresented:\s*isPresented[\s\S]{0,700}?opacity\(isPresented\s*\?\s*1\s*:\s*0\)/, 'the WebView must be created only after the first valid route and remain hidden after close')
-assert.doesNotMatch(contentView, /private\s+struct\s+WebWorkspaceHost[\s\S]{0,1800}?WebRouteLaunch\(route:\s*\.stemHome\)/, 'a hidden resident workspace must not load a fallback product route')
+assert.match(
+  contentView,
+  /private\s+var\s+isDismissing\s*=\s*false/,
+  'the coordinator must track the system presenter handoff explicitly'
+)
+assert.match(
+  contentView,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,420}?pendingLaunch\s*=\s*launch[\s\S]{0,220}?setPresentedLaunch\(nil\)/,
+  'a route requested while another module is active must dismiss and buffer the replacement'
+)
+assert.match(
+  contentView,
+  /func\s+completeDismissal\(\)[\s\S]{0,700}?pendingLaunch[\s\S]{0,700}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
+  'the full-screen dismissal callback must replay and then consume the buffered route'
+)
+assert.match(
+  contentView,
+  /\.fullScreenCover\([\s\S]{0,260}?item:\s*activeWebLaunch[\s\S]{0,320}?onDismiss:\s*webWorkspace\.completeDismissal[\s\S]{0,420}?WebModuleView\([\s\S]{0,260}?presentedLaunch:\s*activeWebLaunch/,
+  'the root must bind the system presenter and provide its dismissal binding to the module'
+)
+assert.doesNotMatch(contentView, /WebWorkspaceHost|retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(
   contentView,
   /queuedWebLaunches|presentNextQueuedWebLaunch/,
@@ -161,18 +171,8 @@ assert.match(
 )
 assert.match(
   webModule,
-  /let\s+isWorkspacePresented:\s*Bool/,
-  'the retained web module must receive explicit presentation state instead of relying on SwiftUI opacity only'
-)
-assert.match(
-  webModule,
-  /EmbeddedWebView\([\s\S]{0,700}?accessibilityIdentifier:\s*"web-module-\\\(route\.id\)"[\s\S]{0,700}?isPresented:\s*isWorkspacePresented/,
-  'the actual WKWebView must receive the dynamic route identifier and presentation state'
-)
-assert.match(
-  webModule,
-  /webView\.accessibilityIdentifier\s*=\s*parent\.accessibilityIdentifier[\s\S]{0,500}?webView\.isHidden\s*=\s*!parent\.isPresented[\s\S]{0,500}?webView\.accessibilityElementsHidden\s*=\s*!parent\.isPresented/,
-  'hiding the retained workspace must hide the real WKWebView from XCTest and accessibility'
+  /EmbeddedWebView\([\s\S]{0,700}?accessibilityIdentifier:\s*"web-module-\\\(route\.id\)"[\s\S]{0,700}?loadWatchdogToken:/,
+  'the presented WKWebView must receive a stable route identifier and watchdog binding'
 )
 assert.doesNotMatch(
   webModule,
@@ -300,7 +300,7 @@ assert.match(
   /normalizedQueryID[\s\S]*?structuralID[\s\S]*?!=\s*structuralID/,
   'custom-scheme deep links must reject conflicting path, host and query route IDs'
 )
-assert.match(contentView, /WebWorkspaceHost\([\s\S]{0,900}?\.zIndex\(1\)/, 'learning workspaces must open as one immersive root-level flow')
+assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebModuleView\(/, 'learning workspaces must open as one immersive root-level flow')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,
@@ -679,21 +679,16 @@ assert.match(
   'a watchdog timeout must stop the pending request before showing its recoverable error state'
 )
 assert.match(webModule, /stopForDismissal/, 'leaving a web module must stop active media and loading')
-assert.match(webModule, /func\s+pauseForHiding\(\)[\s\S]{0,700}?evaluateJavaScript\(/, 'hiding a resident workspace must pause active media')
-assert.doesNotMatch(
-  webModule,
-  /func\s+pauseForHiding\(\)[\s\S]{0,220}?stopLoading\(\)/,
-  'hiding a resident workspace must not stop an in-flight page that will be reused'
-)
+assert.match(webModule, /func\s+pauseForHiding\(\)[\s\S]{0,700}?evaluateJavaScript\(/, 'closing a workspace must pause active media')
 assert.match(
   webModule,
   /Button\s*\{\s*webViewStore\.pauseForHiding\(\)[\s\S]{0,260}?presentedLaunch\s*=\s*nil/,
-  'the close control must pause media before hiding the resident workspace'
+  'the close control must pause media before dismissing the full-screen workspace'
 )
 assert.match(
   webModule,
   /onDisappear\s*\{[\s\S]*?stopForDismissal\(\)/,
-  'the media cleanup must run when the full-screen module is dismissed'
+  'the loading and media cleanup must run when the full-screen module is dismissed'
 )
 assert.match(webModule, /UTType\.pdf/, 'writing and source-paper uploads must accept PDF files')
 assert.match(webModule, /canKeepAuthenticationRedirect/, 'server auth redirects need a dedicated allowlist policy')

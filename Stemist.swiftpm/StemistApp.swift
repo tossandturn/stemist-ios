@@ -26,6 +26,15 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        routeCoordinator.receive(url)
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,
         options connectionOptions: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {

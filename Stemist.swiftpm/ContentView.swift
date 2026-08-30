@@ -8,14 +8,52 @@ enum AppTab: Hashable {
     case profile
 }
 
+@MainActor
+final class WebWorkspaceCoordinator: ObservableObject {
+    @Published private(set) var activeLaunch: WebRouteLaunch?
+    private var pendingLaunch: WebRouteLaunch?
+    private var isDismissing = false
+
+    func present(_ launch: WebRouteLaunch) {
+        if activeLaunch != nil || isDismissing {
+            pendingLaunch = launch
+            if activeLaunch != nil {
+                setPresentedLaunch(nil)
+            }
+            return
+        }
+
+        activeLaunch = launch
+    }
+
+    func setPresentedLaunch(_ launch: WebRouteLaunch?) {
+        if launch == nil, activeLaunch != nil {
+            isDismissing = true
+        }
+        activeLaunch = launch
+    }
+
+    func completeDismissal() {
+        isDismissing = false
+        guard pendingLaunch != nil else { return }
+
+        // Let SwiftUI finish removing the old full-screen cover before replaying a route.
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, self.activeLaunch == nil, !self.isDismissing,
+                  let pendingLaunch = self.pendingLaunch else { return }
+            self.pendingLaunch = nil
+            self.activeLaunch = pendingLaunch
+        }
+    }
+}
+
+@MainActor
 struct ContentView: View {
     let configuration: AppRuntimeConfiguration
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
-    @State private var activeWebLaunch: WebRouteLaunch?
-    @State private var retainedWebLaunch: WebRouteLaunch?
-    @State private var pendingWebLaunch: WebRouteLaunch?
-    @State private var isWebWorkspaceClosing = false
+    @StateObject private var webWorkspace = WebWorkspaceCoordinator()
 
     init(
         configuration: AppRuntimeConfiguration = .current,
@@ -35,34 +73,15 @@ struct ContentView: View {
         present(WebRouteLaunch(route: route))
     }
 
-    private func setActiveWebLaunch(_ launch: WebRouteLaunch?) {
-        if launch == nil, activeWebLaunch != nil {
-            isWebWorkspaceClosing = true
-            activeWebLaunch = nil
-            DispatchQueue.main.async {
-                guard self.isWebWorkspaceClosing else { return }
-                self.isWebWorkspaceClosing = false
-                guard let pendingWebLaunch = self.pendingWebLaunch else { return }
-                self.pendingWebLaunch = nil
-                self.retainedWebLaunch = pendingWebLaunch
-                self.activeWebLaunch = pendingWebLaunch
-            }
-            return
-        }
-
-        if let launch {
-            retainedWebLaunch = launch
-        }
-        activeWebLaunch = launch
+    private func present(_ launch: WebRouteLaunch) {
+        webWorkspace.present(launch)
     }
 
-    private func present(_ launch: WebRouteLaunch) {
-        guard !isWebWorkspaceClosing else {
-            pendingWebLaunch = launch
-            return
-        }
-        retainedWebLaunch = launch
-        activeWebLaunch = launch
+    private var activeWebLaunch: Binding<WebRouteLaunch?> {
+        Binding(
+            get: { webWorkspace.activeLaunch },
+            set: webWorkspace.setPresentedLaunch
+        )
     }
 
     private func consumePendingExternalURL() {
@@ -79,75 +98,71 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            TabView(selection: $selectedTab) {
-                DashboardView(selectedTab: $selectedTab, openRoute: present)
-                    .tabItem { Label("Today", systemImage: "house") }
-                    .tag(AppTab.today)
-                    .accessibilityIdentifier("tab-today")
+        TabView(selection: $selectedTab) {
+            DashboardView(selectedTab: $selectedTab, openRoute: present)
+                .tabItem { Label("Today", systemImage: "house") }
+                .tag(AppTab.today)
+                .accessibilityIdentifier("tab-today")
 
-                ModuleHomeView(
-                    title: "IELTS",
-                    subtitle: "Choose a skill and continue in the same IELTSist account.",
-                    routes: [
-                        .ieltsListening,
-                        .ieltsReading,
-                        .ieltsWriting,
-                        .ieltsSpeaking,
-                        .ieltsVocabulary,
-                    ],
-                    openRoute: present
-                )
-                .tabItem { Label("IELTS", systemImage: "text.book.closed") }
-                .tag(AppTab.ielts)
-                .accessibilityIdentifier("tab-ielts")
-
-                ModuleHomeView(
-                    title: "STEM",
-                    subtitle: "Open a separate IG, AS, A2 or exam practice route.",
-                    routes: [
-                        .stemIG,
-                        .stemAS,
-                        .stemA2,
-                        .stemTopics,
-                        .stemPastPapers,
-                        .stemNotebook,
-                        .stemCoach,
-                    ],
-                    openRoute: present
-                )
-                .tabItem { Label("STEM", systemImage: "atom") }
-                .tag(AppTab.stem)
-                .accessibilityIdentifier("tab-stem")
-
-                NotebookView(openRoute: present)
-                    .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
-                    .tag(AppTab.notebook)
-                    .accessibilityIdentifier("tab-notebook")
-
-                if configuration.showsAccountEntry {
-                    ProfileView(openRoute: present)
-                        .tabItem { Label("Profile", systemImage: "person") }
-                        .tag(AppTab.profile)
-                        .accessibilityIdentifier("tab-profile")
-                }
-            }
-            .allowsHitTesting(activeWebLaunch == nil)
-            .accessibilityHidden(activeWebLaunch != nil)
-
-            WebWorkspaceHost(
-                retainedLaunch: retainedWebLaunch,
-                isPresented: activeWebLaunch != nil,
-                presentedLaunch: Binding(
-                    get: { activeWebLaunch },
-                    set: setActiveWebLaunch
-                ),
-                requestLaunch: present
+            ModuleHomeView(
+                title: "IELTS",
+                subtitle: "Choose a skill and continue in the same IELTSist account.",
+                routes: [
+                    .ieltsListening,
+                    .ieltsReading,
+                    .ieltsWriting,
+                    .ieltsSpeaking,
+                    .ieltsVocabulary,
+                ],
+                openRoute: present
             )
-            .zIndex(1)
+            .tabItem { Label("IELTS", systemImage: "text.book.closed") }
+            .tag(AppTab.ielts)
+            .accessibilityIdentifier("tab-ielts")
+
+            ModuleHomeView(
+                title: "STEM",
+                subtitle: "Open a separate IG, AS, A2 or exam practice route.",
+                routes: [
+                    .stemIG,
+                    .stemAS,
+                    .stemA2,
+                    .stemTopics,
+                    .stemPastPapers,
+                    .stemNotebook,
+                    .stemCoach,
+                ],
+                openRoute: present
+            )
+            .tabItem { Label("STEM", systemImage: "atom") }
+            .tag(AppTab.stem)
+            .accessibilityIdentifier("tab-stem")
+
+            NotebookView(openRoute: present)
+                .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
+                .tag(AppTab.notebook)
+                .accessibilityIdentifier("tab-notebook")
+
+            if configuration.showsAccountEntry {
+                ProfileView(openRoute: present)
+                    .tabItem { Label("Profile", systemImage: "person") }
+                    .tag(AppTab.profile)
+                    .accessibilityIdentifier("tab-profile")
+            }
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
+        .fullScreenCover(
+            item: activeWebLaunch,
+            onDismiss: webWorkspace.completeDismissal
+        ) { launch in
+            WebModuleView(
+                launch: launch,
+                presentedLaunch: activeWebLaunch,
+                requestLaunch: present
+            )
+            .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
+        }
         .onAppear {
             normalizeSelectedTab()
             consumePendingExternalURL()
@@ -159,29 +174,6 @@ struct ContentView: View {
             consumePendingExternalURL()
         }
         .accessibilityIdentifier("stemist-root")
-    }
-}
-
-private struct WebWorkspaceHost: View {
-    let retainedLaunch: WebRouteLaunch?
-    let isPresented: Bool
-    @Binding var presentedLaunch: WebRouteLaunch?
-    let requestLaunch: (WebRouteLaunch) -> Void
-
-    var body: some View {
-        Group {
-            if let launch = retainedLaunch {
-                WebModuleView(
-                    launch: launch,
-                    isWorkspacePresented: isPresented,
-                    presentedLaunch: $presentedLaunch,
-                    requestLaunch: requestLaunch
-                )
-            }
-        }
-        .opacity(isPresented ? 1 : 0)
-        .allowsHitTesting(isPresented)
-        .accessibilityHidden(!isPresented)
     }
 }
 
