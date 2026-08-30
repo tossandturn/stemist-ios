@@ -19,7 +19,7 @@ struct ContentView: View {
 
     init(
         configuration: AppRuntimeConfiguration = .current,
-        routeCoordinator: AppRouteCoordinator = AppRouteCoordinator()
+        routeCoordinator: AppRouteCoordinator
     ) {
         self.configuration = configuration
         _routeCoordinator = ObservedObject(wrappedValue: routeCoordinator)

@@ -79,6 +79,11 @@ assert.match(
 )
 assert.match(contentView, /onChange\(of:\s*selectedTab/, 'tab selection normalization must also handle state restoration')
 assert.match(stemistApp, /@StateObject\s+private\s+var\s+routeCoordinator\s*=\s*AppRouteCoordinator\(\)/, 'the app must retain cold-launch routes above the root view lifecycle')
+assert.doesNotMatch(
+  contentView,
+  /routeCoordinator:\s*AppRouteCoordinator\s*=\s*AppRouteCoordinator\(\)/,
+  'the app-owned main-actor route coordinator must be injected instead of constructed in a nonisolated default argument'
+)
 assert.match(stemistApp, /\.onOpenURL\s*\{\s*url\s+in[\s\S]{0,180}?routeCoordinator\.receive\(url\)/, 'the app lifecycle boundary must capture incoming URLs durably')
 assert.match(contentView, /@ObservedObject\s+private\s+var\s+routeCoordinator:\s*AppRouteCoordinator/, 'the root shell must observe the app-owned route coordinator')
 assert.match(contentView, /takePendingURL\(\)[\s\S]{0,260}?WebRouteLaunch\([\s\S]{0,260}?present\(launch\)/, 'the root shell must consume a retained URL through the normal route presenter')
