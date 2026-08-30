@@ -16,6 +16,7 @@ let package = Package(
         .iOSApplication(
             name: "Stemist",
             targets: ["AppModule"],
+            bundleIdentifier: "com.ieltsist.stemist",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .placeholder(icon: .calendar),

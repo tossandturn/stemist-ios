@@ -416,7 +416,7 @@ enum WebRoute: Hashable, Identifiable {
         .aiCoach,
     ]
 
-    init?(url: URL, allowsAccountEntry: Bool = true) {
+    init?(url: URL, allowsAccountEntry: Bool) {
         guard let scheme = url.scheme?.lowercased() else { return nil }
 
         switch scheme {

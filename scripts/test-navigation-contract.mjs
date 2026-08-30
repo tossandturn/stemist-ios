@@ -35,9 +35,19 @@ assert.match(contentView, /onChange\(of:\s*selectedTab/, 'tab selection normaliz
 assert.match(packageSwift, /\.iOS\("17\.0"\)/, 'the app should support iPadOS 17 and newer')
 assert.doesNotMatch(packageSwift, /\.iOS\("18\.6"\)/, 'the deployment target must not require the newest iPadOS')
 assert.match(
+  packageSwift,
+  /bundleIdentifier:\s*"com\.ieltsist\.stemist"/,
+  'device builds need a stable App Store Connect bundle identifier'
+)
+assert.match(
   contentView,
   /init\?\(url:\s*URL,\s*allowsAccountEntry:\s*Bool/,
   'typed routes must parse app deep links with account visibility policy'
+)
+assert.doesNotMatch(
+  contentView,
+  /init\?\(url:\s*URL,\s*allowsAccountEntry:\s*Bool\s*=\s*true/,
+  'account visibility must be explicit at every deep-link call site'
 )
 assert.match(contentView, /\.onOpenURL\s*\{/, 'the root view must accept app deep links')
 assert.match(contentView, /queryItems/, 'deep links must support route query parameters')
@@ -165,10 +175,14 @@ assert.match(codemagic, /INFOPLIST_KEY_NSMicrophoneUsageDescription/, 'CI must i
 assert.match(codemagic, /INFOPLIST_KEY_NSCameraUsageDescription/, 'CI must inject the camera usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSPhotoLibraryUsageDescription/, 'CI must inject the photo-library usage description')
 assert.match(codemagic, /PlistBuddy/, 'CI must verify privacy metadata in the built app')
+assert.match(codemagic, /Print :CFBundleIdentifier/, 'Codemagic must verify the stable bundle identifier')
+assert.match(codemagic, /com\.ieltsist\.stemist/, 'Codemagic must check the expected bundle identifier value')
 assert.ok(fs.existsSync(githubWorkflowPath), 'a macOS CI build is required when Windows cannot compile Swift')
 const githubWorkflow = fs.readFileSync(githubWorkflowPath, 'utf8')
 assert.match(githubWorkflow, /runs-on:\s*macos-14|runs-on:\s*macos-latest/, 'macOS CI must use an Apple runner')
 assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must compile the iOS Simulator product')
 assert.match(githubWorkflow, /PlistBuddy/, 'macOS CI must verify generated app metadata')
+assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify the stable bundle identifier')
+assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')
 
 console.log('iOS navigation contract passed.')

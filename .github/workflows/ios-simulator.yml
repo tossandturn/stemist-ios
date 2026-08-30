@@ -58,6 +58,7 @@ jobs:
             /usr/libexec/PlistBuddy -c "Print :$key" "$PLIST" >/dev/null
           done
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")" = "stemist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.ieltsist.stemist"
 
       - name: Upload simulator build evidence
         uses: actions/upload-artifact@v4
