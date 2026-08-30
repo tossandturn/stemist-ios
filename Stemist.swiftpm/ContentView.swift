@@ -31,16 +31,24 @@ struct ContentView: View {
     private func present(_ launch: WebRouteLaunch) {
         guard activeWebLaunch == nil else {
             pendingWebLaunch = launch
+            activeWebLaunch = nil
             return
         }
 
-        activeWebLaunch = launch
+        pendingWebLaunch = launch
+        presentPendingWebLaunch()
     }
 
     private func presentPendingWebLaunch() {
-        guard let pendingWebLaunch else { return }
+        guard activeWebLaunch == nil, let pendingWebLaunch else { return }
         self.pendingWebLaunch = nil
-        activeWebLaunch = pendingWebLaunch
+        DispatchQueue.main.async {
+            guard self.activeWebLaunch == nil else {
+                self.pendingWebLaunch = pendingWebLaunch
+                return
+            }
+            self.activeWebLaunch = pendingWebLaunch
+        }
     }
 
     var body: some View {
@@ -99,7 +107,10 @@ struct ContentView: View {
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .fullScreenCover(item: $activeWebLaunch, onDismiss: presentPendingWebLaunch) { launch in
-            WebModuleView(launch: launch)
+            WebModuleView(
+                launch: launch,
+                presentedLaunch: $activeWebLaunch
+            )
                 .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         }
         .onOpenURL { url in
@@ -114,6 +125,10 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
+        }
+        .onChange(of: activeWebLaunch) { _, launch in
+            guard launch == nil else { return }
+            presentPendingWebLaunch()
         }
         .accessibilityIdentifier("stemist-root")
     }

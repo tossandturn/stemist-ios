@@ -255,6 +255,7 @@ struct WebModuleView: View {
     @Environment(\.stemistAllowsAccountEntry) private var allowsAccountEntry
     let route: WebRoute
     let launchURL: URL
+    @Binding private var presentedLaunch: WebRouteLaunch?
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
@@ -268,11 +269,20 @@ struct WebModuleView: View {
     init(route: WebRoute) {
         self.route = route
         launchURL = route.url
+        _presentedLaunch = .constant(nil)
     }
 
     init(launch: WebRouteLaunch) {
+        self.init(launch: launch, presentedLaunch: .constant(nil))
+    }
+
+    init(
+        launch: WebRouteLaunch,
+        presentedLaunch: Binding<WebRouteLaunch?>
+    ) {
         route = launch.route
         launchURL = launch.url
+        _presentedLaunch = presentedLaunch
     }
 
     private func retryLoading() {
@@ -372,6 +382,7 @@ struct WebModuleView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        presentedLaunch = nil
                         webViewStore.stopForDismissal()
                         dismiss()
                     } label: {

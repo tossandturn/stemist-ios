@@ -95,10 +95,55 @@ assert.match(
   contentView,
   /@State\s+private\s+var\s+pendingWebLaunch:\s*WebRouteLaunch\?/
 )
+assert.doesNotMatch(
+  contentView,
+  /queuedWebLaunches/,
+  'a single pending route avoids stale queue entries after an already-completed dismissal'
+)
 assert.match(
   contentView,
   /fullScreenCover\(item:\s*\$activeWebLaunch,\s*onDismiss:\s*presentPendingWebLaunch\)/,
   'the root presenter must serialize a route received while another module is dismissing'
+)
+assert.match(
+  contentView,
+  /pendingWebLaunch\s*=\s*launch[\s\S]{0,160}?activeWebLaunch\s*=\s*nil/,
+  'a route received during dismissal must explicitly release the stale active item'
+)
+assert.match(
+  contentView,
+  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?presentPendingWebLaunch\(\)/,
+  'a queued route must be replayed when the active item reaches nil'
+)
+assert.match(
+  contentView,
+  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?guard\s+launch\s*==\s*nil/,
+  'the active presentation observer must only replay after the item is cleared'
+)
+assert.match(
+  contentView,
+  /private\s+func\s+presentPendingWebLaunch\(\)[\s\S]{0,480}?DispatchQueue\.main\.async/,
+  'a queued route must be replayed in a later main-queue transaction after dismissal'
+)
+assert.match(
+  contentView,
+  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*\$activeWebLaunch\s*\)/,
+  'the web module must receive the authoritative root presentation binding'
+)
+assert.doesNotMatch(
+  contentView,
+  /presentNextQueuedWebLaunch/,
+  'the root presenter must not call the removed queue implementation'
+)
+assert.match(
+  webModule,
+  /@Binding\s+private\s+var\s+presentedLaunch:\s*WebRouteLaunch\?/,
+  'the web module must be able to clear its root presentation item'
+)
+assert.match(
+  webModule,
+  /presentedLaunch\s*=\s*nil[\s\S]{0,240}?webViewStore\.stopForDismissal/,
+  'the close action must clear the root item before stopping WebKit'
 )
 assert.match(
   contentView,
