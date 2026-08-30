@@ -143,7 +143,12 @@ assert.match(
 assert.match(
   contentView,
   /@Published\s+private\(set\)\s+var\s+activeLaunch:\s*WebRouteLaunch\?/,
-  'the coordinator must expose only the active launch to SwiftUI'
+  'the coordinator must expose the active route to the workspace host'
+)
+assert.match(
+  contentView,
+  /@Published\s+private\(set\)\s+var\s+isPresented\s*=\s*false/,
+  'the coordinator must expose a separate presentation state'
 )
 assert.match(
   contentView,
@@ -157,40 +162,50 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,420}?pendingLaunch\s*=\s*launch[\s\S]{0,220}?setPresentedLaunch\(nil\)/,
-  'a route requested while another module is active must dismiss and buffer the replacement'
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,220}?if\s+isDismissing\s*\{[\s\S]{0,120}?pendingLaunch\s*=\s*launch/,
+  'a route requested during dismissal must be buffered'
 )
 assert.match(
   contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,900}?pendingLaunch\s*=\s*nil[\s\S]{0,180}?activeLaunch\s*=\s*launch/,
-  'a fresh route after dismissal must consume any stale pending route before presenting'
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,650}?if\s+isPresented\s*\{[\s\S]{0,420}?activeLaunch\s*=\s*launch[\s\S]{0,320}?pendingLaunch\s*=\s*nil[\s\S]{0,240}?isPresented\s*=\s*true/,
+  'the workspace must replace resident content in place and present fresh routes'
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,360}?activeLaunch\s*=\s*nil[\s\S]{0,360}?scheduleDismissalCompletion\(\)/,
-  'the full-screen dismissal callback must be idempotent and start the buffered-route handoff even if binding updates arrive out of order'
+  /func\s+dismiss\(\)[\s\S]{0,260}?isDismissing\s*=\s*true[\s\S]{0,160}?isPresented\s*=\s*false/,
+  'the workspace must explicitly request dismissal through its state machine'
 )
 assert.match(
   contentView,
-  /func\s+scheduleDismissalCompletion\(\)[\s\S]{0,900}?pendingLaunch[\s\S]{0,500}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
-  'the post-dismissal handoff must consume and replay the latest buffered route'
+  /func\s+completeDismissal\(\)[\s\S]{0,1100}?activeLaunch\s*=\s*nil[\s\S]{0,500}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,300}?activeLaunch\s*=\s*pendingLaunch[\s\S]{0,220}?isPresented\s*=\s*true/,
+  'the settled dismissal callback must atomically replay the latest buffered route'
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,360}?isDismissing\s*=\s*true[\s\S]{0,180}?scheduleDismissalCompletion\(\)/,
-  'onDismiss must always schedule the post-transition handoff, including when it arrives before the binding setter'
+  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,220}?guard\s+!presented\s+else\s*\{\s*return\s*\}[\s\S]{0,120}?dismiss\(\)/,
+  'system presentation writes must only be allowed to request dismissal'
 )
 assert.doesNotMatch(
   contentView,
-  /func\s+setPresentedLaunch\(_ launch:[\s\S]{0,120}?activeLaunch\s*=\s*launch/,
-  'the binding setter must not resurrect a stale non-nil route during a transition'
+  /setPresentedLaunch/,
+  'the root presenter must not use an item binding that can resurrect stale routes'
 )
 assert.match(
   contentView,
-  /\.fullScreenCover\([\s\S]{0,260}?item:\s*activeWebLaunch[\s\S]{0,320}?onDismiss:\s*webWorkspace\.completeDismissal[\s\S]{0,420}?WebModuleView\([\s\S]{0,260}?presentedLaunch:\s*activeWebLaunch/,
-  'the root must bind the system presenter and provide its dismissal binding to the module'
+  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*\$isWorkspacePresented[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
+  'the root must keep one native boolean presenter and render the coordinator-owned workspace'
 )
-assert.doesNotMatch(contentView, /WebWorkspaceHost|retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
+assert.match(
+  contentView,
+  /onChange\(of:\s*webWorkspace\.isPresented\)[\s\S]{0,260}?isWorkspacePresented\s*=\s*desiredPresentation/,
+  'coordinator presentation state must drive the native presenter binding'
+)
+assert.match(
+  contentView,
+  /onChange\(of:\s*isWorkspacePresented\)[\s\S]{0,260}?webWorkspace\.setPresented\(false\)/,
+  'system dismissal must be forwarded back to the coordinator'
+)
+assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(
   contentView,
   /queuedWebLaunches|presentNextQueuedWebLaunch/,
@@ -199,8 +214,8 @@ assert.doesNotMatch(
 assert.match(webModule, /func\s+updateUIView\(_\s+webView:\s*WKWebView[\s\S]{0,500}?requestedURL\s*!=\s*url[\s\S]{0,240}?load\(url,\s*in:\s*webView\)/, 'route changes must update the resident WKWebView instead of rebuilding it')
 assert.match(
   webModule,
-  /@Binding\s+private\s+var\s+presentedLaunch:\s*WebRouteLaunch\?/,
-  'the web module must be able to clear its root presentation item'
+  /let\s+dismissWorkspace:\s*\(\)\s*->\s*Void/,
+  'the web module must request dismissal through the workspace coordinator'
 )
 assert.match(
   webModule,
@@ -333,7 +348,7 @@ assert.match(
   /normalizedQueryID[\s\S]*?structuralID[\s\S]*?!=\s*structuralID/,
   'custom-scheme deep links must reject conflicting path, host and query route IDs'
 )
-assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebModuleView\(/, 'learning workspaces must open as one immersive root-level flow')
+assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebWorkspaceHost\(/, 'learning workspaces must open as one immersive root-level flow')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,
@@ -721,7 +736,7 @@ assert.match(webModule, /stopForDismissal/, 'leaving a web module must stop acti
 assert.match(webModule, /func\s+pauseForHiding\(\)[\s\S]{0,700}?evaluateJavaScript\(/, 'closing a workspace must pause active media')
 assert.match(
   webModule,
-  /Button\s*\{\s*webViewStore\.pauseForHiding\(\)[\s\S]{0,260}?presentedLaunch\s*=\s*nil/,
+  /Button\s*\{\s*webViewStore\.pauseForHiding\(\)[\s\S]{0,260}?dismissWorkspace\(\)/,
   'the close control must pause media before dismissing the full-screen workspace'
 )
 assert.match(

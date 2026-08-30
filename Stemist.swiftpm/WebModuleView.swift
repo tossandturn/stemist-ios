@@ -260,12 +260,11 @@ private enum CoachAutoOpenScript {
 }
 
 struct WebModuleView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.stemistAllowsAccountEntry) private var allowsAccountEntry
     let route: WebRoute
     let launchURL: URL
     let requestLaunch: (WebRouteLaunch) -> Void
-    @Binding private var presentedLaunch: WebRouteLaunch?
+    let dismissWorkspace: () -> Void
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
@@ -280,37 +279,22 @@ struct WebModuleView: View {
         self.route = route
         launchURL = route.url
         requestLaunch = { _ in }
-        _presentedLaunch = .constant(nil)
+        dismissWorkspace = {}
     }
 
     init(launch: WebRouteLaunch) {
-        self.init(
-            launch: launch,
-            presentedLaunch: .constant(nil),
-            requestLaunch: { _ in }
-        )
+        self.init(launch: launch, requestLaunch: { _ in }, dismissWorkspace: {})
     }
 
     init(
         launch: WebRouteLaunch,
-        presentedLaunch: Binding<WebRouteLaunch?>
-    ) {
-        self.init(
-            launch: launch,
-            presentedLaunch: presentedLaunch,
-            requestLaunch: { _ in }
-        )
-    }
-
-    init(
-        launch: WebRouteLaunch,
-        presentedLaunch: Binding<WebRouteLaunch?>,
-        requestLaunch: @escaping (WebRouteLaunch) -> Void
+        requestLaunch: @escaping (WebRouteLaunch) -> Void,
+        dismissWorkspace: @escaping () -> Void
     ) {
         route = launch.route
         launchURL = launch.url
         self.requestLaunch = requestLaunch
-        _presentedLaunch = presentedLaunch
+        self.dismissWorkspace = dismissWorkspace
     }
 
     private func retryLoading() {
@@ -423,11 +407,7 @@ struct WebModuleView: View {
 
                     Button {
                         webViewStore.pauseForHiding()
-                        if presentedLaunch != nil {
-                            presentedLaunch = nil
-                        } else {
-                            dismiss()
-                        }
+                        dismissWorkspace()
                     } label: {
                         Image(systemName: "xmark")
                             .frame(width: 44, height: 44)

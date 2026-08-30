@@ -10,71 +10,86 @@ enum AppTab: Hashable {
 
 @MainActor
 final class WebWorkspaceCoordinator: ObservableObject {
-    private enum Timing {
-        // A full-screen cover can remain in UIKit's transition container for
-        // a short period after its binding is cleared. Keep replacement routes
-        // buffered until that container has settled.
-        static let dismissalSettleNanoseconds: UInt64 = 400_000_000
-    }
-
     @Published private(set) var activeLaunch: WebRouteLaunch?
+    @Published private(set) var isPresented = false
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
-    private var dismissalToken = UUID()
 
     func present(_ launch: WebRouteLaunch) {
-        if activeLaunch != nil || isDismissing {
+        if isDismissing {
             pendingLaunch = launch
-            if activeLaunch != nil {
-                setPresentedLaunch(nil)
-            }
+            return
+        }
+
+        if isPresented {
+            // Keep one full-screen presenter alive and replace only its
+            // resident content. This avoids a SwiftUI/UIKit teardown race
+            // when a module requests another module (for example account).
+            guard activeLaunch?.id != launch.id else { return }
+            activeLaunch = launch
             return
         }
 
         pendingLaunch = nil
         activeLaunch = launch
+        isPresented = true
     }
 
-    func setPresentedLaunch(_ launch: WebRouteLaunch?) {
-        // The binding is intentionally one-way: the coordinator is the only
-        // source allowed to present a route. Ignore stale non-nil writes that
-        // SwiftUI can emit while a full-screen cover is transitioning.
-        guard launch == nil else { return }
+    func dismiss() {
+        guard activeLaunch != nil, isPresented, !isDismissing else { return }
+        isDismissing = true
+        isPresented = false
+    }
 
-        let hadActiveLaunch = activeLaunch != nil
-        if hadActiveLaunch {
-            isDismissing = true
-        }
-
-        activeLaunch = launch
+    func setPresented(_ presented: Bool) {
+        // The coordinator owns presentation. SwiftUI can write `false` for a
+        // swipe/system dismissal; a stale `true` must never resurrect content.
+        guard !presented else { return }
+        dismiss()
     }
 
     func completeDismissal() {
-        // SwiftUI may invoke onDismiss before or after the binding setter. Clear
-        // the source of truth first, then keep buffering until the cover is gone.
+        guard isDismissing || !isPresented else { return }
+
+        // `onDismiss` is the presentation system's settled boundary. Do not
+        // replay a pending route until this callback, rather than guessing a
+        // transition duration with a timer.
+        isDismissing = false
+        isPresented = false
         activeLaunch = nil
-        isDismissing = true
-        scheduleDismissalCompletion()
+
+        guard let pendingLaunch else { return }
+        self.pendingLaunch = nil
+        activeLaunch = pendingLaunch
+        isPresented = true
     }
 
-    private func scheduleDismissalCompletion() {
-        let token = UUID()
-        dismissalToken = token
-        // Let SwiftUI and UIKit finish removing the old full-screen cover
-        // before replaying a route. The token makes duplicate setter/onDismiss
-        // callbacks harmless while still allowing the latest route to win.
-        Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: Timing.dismissalSettleNanoseconds)
-            } catch {
-                return
+    func hasPresented(_ launch: WebRouteLaunch) -> Bool {
+        activeLaunch?.id == launch.id && isPresented
+    }
+}
+
+@MainActor
+private struct WebWorkspaceHost: View {
+    @ObservedObject var workspace: WebWorkspaceCoordinator
+    let configuration: AppRuntimeConfiguration
+    let requestLaunch: (WebRouteLaunch) -> Void
+    let dismissWorkspace: () -> Void
+
+    var body: some View {
+        Group {
+            if let launch = workspace.activeLaunch {
+                WebModuleView(
+                    launch: launch,
+                    requestLaunch: requestLaunch,
+                    dismissWorkspace: dismissWorkspace
+                )
+                .id(launch.id)
+            } else {
+                Color.clear
             }
-            guard let self, self.dismissalToken == token, self.activeLaunch == nil else { return }
-            self.isDismissing = false
-            guard let pendingLaunch = self.pendingLaunch else { return }
-            self.pendingLaunch = nil
-            self.activeLaunch = pendingLaunch
         }
+        .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
     }
 }
 
@@ -84,6 +99,7 @@ struct ContentView: View {
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
     @State private var rootIsReady = false
+    @State private var isWorkspacePresented = false
     @StateObject private var webWorkspace = WebWorkspaceCoordinator()
 
     init(
@@ -108,13 +124,6 @@ struct ContentView: View {
         webWorkspace.present(launch)
     }
 
-    private var activeWebLaunch: Binding<WebRouteLaunch?> {
-        Binding(
-            get: { webWorkspace.activeLaunch },
-            set: webWorkspace.setPresentedLaunch
-        )
-    }
-
     private func consumePendingExternalURL() {
         guard rootIsReady else { return }
         guard let url = routeCoordinator.peekPendingURL() else { return }
@@ -126,6 +135,7 @@ struct ContentView: View {
             return
         }
         present(launch)
+        guard webWorkspace.hasPresented(launch) else { return }
         routeCoordinator.acknowledgePendingURL(url)
     }
 
@@ -203,15 +213,15 @@ struct ContentView: View {
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .fullScreenCover(
-            item: activeWebLaunch,
-            onDismiss: webWorkspace.completeDismissal
-        ) { launch in
-            WebModuleView(
-                launch: launch,
-                presentedLaunch: activeWebLaunch,
-                requestLaunch: present
+            isPresented: $isWorkspacePresented,
+            onDismiss: { webWorkspace.completeDismissal() }
+        ) {
+            WebWorkspaceHost(
+                workspace: webWorkspace,
+                configuration: configuration,
+                requestLaunch: present,
+                dismissWorkspace: webWorkspace.dismiss
             )
-            .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         }
         .onAppear {
             normalizeSelectedTab()
@@ -220,6 +230,19 @@ struct ContentView: View {
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
+        }
+        .onChange(of: webWorkspace.isPresented) { _, desiredPresentation in
+            guard isWorkspacePresented != desiredPresentation else { return }
+            isWorkspacePresented = desiredPresentation
+        }
+        .onChange(of: webWorkspace.activeLaunch?.id) { _, _ in
+            // A deep link can arrive while the previous module is closing.
+            // Re-check it when the coordinator replays the buffered route.
+            schedulePendingExternalURLConsumption()
+        }
+        .onChange(of: isWorkspacePresented) { _, presented in
+            guard !presented, webWorkspace.isPresented else { return }
+            webWorkspace.setPresented(false)
         }
         .task(id: routeCoordinator.pendingURL) {
             schedulePendingExternalURLConsumption()
