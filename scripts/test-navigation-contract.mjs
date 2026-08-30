@@ -3,6 +3,7 @@ import fs from 'node:fs'
 
 const contentView = fs.readFileSync('Stemist.swiftpm/ContentView.swift', 'utf8')
 const webModule = fs.readFileSync('Stemist.swiftpm/WebModuleView.swift', 'utf8')
+const stemistApp = fs.readFileSync('Stemist.swiftpm/StemistApp.swift', 'utf8')
 const packageSwift = fs.readFileSync('Stemist.swiftpm/Package.swift', 'utf8')
 const codemagic = fs.readFileSync('codemagic.yaml', 'utf8')
 const readme = fs.readFileSync('README.md', 'utf8')
@@ -77,6 +78,20 @@ assert.match(
   'normal mode must explicitly guard a restored Profile selection'
 )
 assert.match(contentView, /onChange\(of:\s*selectedTab/, 'tab selection normalization must also handle state restoration')
+assert.match(stemistApp, /@StateObject\s+private\s+var\s+routeCoordinator\s*=\s*AppRouteCoordinator\(\)/, 'the app must retain cold-launch routes above the root view lifecycle')
+assert.match(stemistApp, /\.onOpenURL\s*\{\s*url\s+in[\s\S]{0,180}?routeCoordinator\.receive\(url\)/, 'the app lifecycle boundary must capture incoming URLs durably')
+assert.match(contentView, /@ObservedObject\s+private\s+var\s+routeCoordinator:\s*AppRouteCoordinator/, 'the root shell must observe the app-owned route coordinator')
+assert.match(contentView, /takePendingURL\(\)[\s\S]{0,260}?WebRouteLaunch\([\s\S]{0,260}?present\(launch\)/, 'the root shell must consume a retained URL through the normal route presenter')
+assert.match(
+  contentView,
+  /private\s+func\s+schedulePendingExternalURLConsumption\(\)[\s\S]{0,420}?scenePhase\s*==\s*\.active[\s\S]{0,420}?consumePendingExternalURL\(\)/,
+  'cold-launch route consumption must remain gated on an active scene'
+)
+assert.match(
+  contentView,
+  /onChange\(of:\s*scenePhase\)[\s\S]{0,260}?phase\s*==\s*\.active[\s\S]{0,260}?schedulePendingExternalURLConsumption\(\)/,
+  'an active scene transition must schedule retained cold-launch route consumption'
+)
 assert.equal(
   (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
   1,
@@ -107,13 +122,13 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /fullScreenCover\(item:\s*\$activeWebLaunch,\s*onDismiss:\s*handleWebLaunchDismissed\)/,
+  /fullScreenCover\(item:\s*webLaunchPresentation,\s*onDismiss:\s*handleWebLaunchDismissed\)/,
   'the root presenter must serialize a route received while another module is dismissing'
 )
 assert.match(
   contentView,
-  /pendingWebLaunch\s*=\s*launch[\s\S]{0,160}?activeWebLaunch\s*=\s*nil/,
-  'a route received during dismissal must explicitly release the stale active item'
+  /pendingWebLaunch\s*=\s*launch[\s\S]{0,160}?webLaunchPresentation\.wrappedValue\s*=\s*nil/,
+  'a replacement route must request dismissal through the root presentation binding'
 )
 assert.match(
   contentView,
@@ -127,18 +142,18 @@ assert.match(
 )
 assert.match(
   contentView,
-  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,260}?previousLaunch\s*!=\s*nil[\s\S]{0,260}?isWebLaunchDismissing\s*=\s*true/,
-  'interactive dismissal must enter the same in-flight phase without replaying a route'
+  /private\s+var\s+webLaunchPresentation:\s*Binding<WebRouteLaunch\?>[\s\S]{0,720}?get:\s*\{\s*activeWebLaunch\s*\}[\s\S]{0,720}?set:\s*\{\s*launch\s+in[\s\S]{0,720}?activeWebLaunch\s*!=\s*nil[\s\S]{0,720}?launch\s*==\s*nil[\s\S]{0,720}?isWebLaunchDismissing\s*=\s*true[\s\S]{0,720}?activeWebLaunch\s*=\s*launch/,
+  'the presentation binding must mark a nonnil-to-nil transition before accepting it'
 )
 assert.doesNotMatch(
   contentView,
-  /onChange\(of:\s*activeWebLaunch\)[\s\S]{0,500}?presentPendingWebLaunch\(\)/,
-  'active item changes must never replay a route before onDismiss'
+  /onChange\(of:\s*activeWebLaunch\)/,
+  'active item observation can race onDismiss and permanently restore the dismissing flag'
 )
 assert.match(
   contentView,
-  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*\$activeWebLaunch,\s*isDismissing:\s*\$isWebLaunchDismissing\s*\)/,
-  'the web module must receive the authoritative root presentation binding'
+  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*webLaunchPresentation,\s*requestLaunch:\s*present\s*\)/,
+  'explicit close and in-process QA routing must share the authoritative root presenter'
 )
 assert.doesNotMatch(
   contentView,
@@ -152,14 +167,16 @@ assert.match(
 )
 assert.match(
   webModule,
-  /@Binding\s+private\s+var\s+isDismissing:\s*Bool/,
-  'the web module must mark dismissal before clearing the root item'
+  /presentedLaunch\s*=\s*nil[\s\S]{0,240}?webViewStore\.stopForDismissal/,
+  'the close action must request root dismissal before stopping WebKit'
 )
-assert.match(
+assert.doesNotMatch(
   webModule,
-  /isDismissing\s*=\s*true[\s\S]{0,160}?presentedLaunch\s*=\s*nil[\s\S]{0,240}?webViewStore\.stopForDismissal/,
-  'the close action must clear the root item before stopping WebKit'
+  /@Binding\s+private\s+var\s+isDismissing:/,
+  'the web module must not independently mutate root dismissal phase state'
 )
+assert.match(webModule, /let\s+requestLaunch:\s*\(WebRouteLaunch\)\s*->\s*Void/, 'the web module must expose an in-process route request to its parent')
+assert.match(webModule, /allowsAccountEntry[\s\S]{0,900}?requestLaunch\(WebRouteLaunch\(route:\s*\.ieltsAccount\)\)[\s\S]{0,900}?accessibilityIdentifier\("web-open-account"\)/, 'the QA-only account control must request an in-process account route')
 assert.match(
   contentView,
   /let\s+openRoute:\s*\(WebRoute\)\s*->\s*Void/,
@@ -197,7 +214,7 @@ assert.doesNotMatch(
   /init\?\(url:\s*URL,\s*allowsAccountEntry:\s*Bool\s*=\s*true/,
   'account visibility must be explicit at every deep-link call site'
 )
-assert.match(contentView, /\.onOpenURL\s*\{/, 'the root view must accept app deep links')
+assert.doesNotMatch(contentView, /\.onOpenURL\s*\{/, 'deep-link capture must not depend on a transient root view callback')
 assert.match(contentView, /queryItems/, 'deep links must support route query parameters')
 assert.match(
   contentView,
@@ -431,7 +448,10 @@ assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'th
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
 assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
-assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/, 'the shell suite must cover queued deep links during dismissal')
+assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
+assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
+assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?app\.open\(accountURL\)/, 'the student account boundary must also survive a cold-launch deep link')
+assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
   shellUITests,
   /app\.tabBars\.buttons/,
@@ -680,6 +700,16 @@ assert.match(codemagic, /Print :CFBundleIdentifier/, 'Codemagic must verify the 
 assert.match(codemagic, /com\.ieltsist\.stemist/, 'Codemagic must check the expected bundle identifier value')
 assert.match(codemagic, /Print :CFBundleDisplayName/, 'Codemagic must verify the stable display name')
 assert.match(codemagic, /Print :CFBundleName/, 'Codemagic must verify the stable bundle name')
+assert.match(
+  codemagic,
+  /Print :STEMIST_FULL_FEATURE_TEST' "\$PLIST"\)" = "NO"/,
+  'Codemagic must reject a student artifact that exposes full-feature account UI'
+)
+assert.match(
+  codemagic,
+  /Print :STEMIST_FULL_FEATURE_TEST' "\$QA_PLIST"\)" = "YES"/,
+  'Codemagic must prove the internal QA artifact exposes full-feature account UI'
+)
 assert.ok(fs.existsSync(githubWorkflowPath), 'a macOS CI build is required when Windows cannot compile Swift')
 const githubWorkflow = fs.readFileSync(githubWorkflowPath, 'utf8')
 assert.match(githubWorkflow, /runs-on:\s*macos-15/, 'macOS CI must use the macOS 15 Apple runner')
@@ -720,13 +750,23 @@ assert.match(
 )
 assert.match(
   githubWorkflow,
-  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/,
-  'macOS CI must execute the dismissal/deep-link regression'
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/,
+  'macOS CI must execute the cold-launch account regression'
 )
 assert.match(
   codemagic,
-  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal/,
-  'Codemagic must execute the dismissal/deep-link regression'
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/,
+  'Codemagic must execute the cold-launch account regression'
+)
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/,
+  'macOS CI must execute the in-process module replacement regression'
+)
+assert.match(
+  codemagic,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/,
+  'Codemagic must execute the in-process module replacement regression'
 )
 
 const studentShellTests = [
@@ -759,6 +799,16 @@ assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify 
 assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')
 assert.match(githubWorkflow, /Print :CFBundleDisplayName/, 'macOS CI must verify the stable display name')
 assert.match(githubWorkflow, /Print :CFBundleName/, 'macOS CI must verify the stable bundle name')
+assert.match(
+  githubWorkflow,
+  /Print :STEMIST_FULL_FEATURE_TEST' "\$PLIST"\)" = "NO"/,
+  'macOS CI must reject a student artifact that exposes full-feature account UI'
+)
+assert.match(
+  githubWorkflow,
+  /Print :STEMIST_FULL_FEATURE_TEST' "\$QA_PLIST"\)" = "YES"/,
+  'macOS CI must prove the internal QA artifact exposes full-feature account UI'
+)
 assert.match(githubWorkflow, /(?:^|\n)\s*STEMIST_FULL_FEATURE_TEST=YES\s*\\/, 'macOS CI must build a separate QA app with the full-feature switch')
 
 for (const [workflowName, workflow] of [

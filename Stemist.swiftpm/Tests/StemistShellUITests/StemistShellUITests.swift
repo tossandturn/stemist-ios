@@ -24,7 +24,10 @@ final class StemistShellUITests: XCTestCase {
         XCTAssertFalse(tabButton("Profile").exists)
         attachScreenshot(named: "student-account-entry-hidden")
 
+        app.terminate()
         app.open(accountURL)
+        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 3))
+        XCTAssertFalse(tabButton("Profile").exists)
         XCTAssertFalse(webModule("web-module-ielts-account").waitForExistence(timeout: 1))
         XCTAssertTrue(app.otherElements["stemist-root"].exists)
         attachScreenshot(named: "student-account-deep-link-blocked")
@@ -99,13 +102,6 @@ final class StemistShellUITests: XCTestCase {
             moduleIdentifier: "web-module-ielts-account"
         )
 
-        XCTAssertTrue(waitUntilHittable(app.buttons["route-ielts-account"]))
-        app.open(accountURL)
-        let accountModule = webModule("web-module-ielts-account")
-        XCTAssertTrue(accountModule.waitForExistence(timeout: 3))
-        attachScreenshot(named: "qa-account-deep-link-opened")
-        closeWebModule(accountModule, named: "web-module-ielts-account")
-
         selectTab("IELTS")
         exerciseRoutes([
             RouteExpectation(buttonIdentifier: "route-ielts-listening", moduleIdentifier: "web-module-ielts-listening"),
@@ -154,7 +150,26 @@ final class StemistShellUITests: XCTestCase {
         )
     }
 
-    func testFullFeatureQABuildQueuesAccountDeepLinkDuringDismissal() {
+    func testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch() {
+        app = XCUIApplication()
+        app.launchEnvironment["STEMIST_FULL_FEATURE_TEST"] = "YES"
+        app.open(accountURL)
+
+        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 3))
+        XCTAssertTrue(tabButton("Profile").exists)
+        let accountModule = webModule("web-module-ielts-account")
+        guard accountModule.waitForExistence(timeout: 5) else {
+            XCTFail(
+                "Expected a cold-launch account deep link to open the QA account module."
+                    + "\n\nAccessibility hierarchy after cold launch:\n\(app.debugDescription)"
+            )
+            return
+        }
+        attachScreenshot(named: "qa-account-deep-link-opened-from-cold-launch")
+        closeWebModule(accountModule, named: "web-module-ielts-account")
+    }
+
+    func testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement() {
         launchApp(fullFeatureTest: true)
         selectTab("IELTS")
 
@@ -166,25 +181,24 @@ final class StemistShellUITests: XCTestCase {
         let listeningModule = webModule("web-module-ielts-listening")
         XCTAssertTrue(listeningModule.waitForExistence(timeout: 3))
 
-        let closeButton = app.buttons["web-close"]
-        XCTAssertTrue(waitUntilHittable(closeButton))
-        guard closeButton.exists, closeButton.isHittable else { return }
-        closeButton.tap()
-        app.open(accountURL)
+        let accountRoute = app.buttons["web-open-account"]
+        XCTAssertTrue(waitUntilHittable(accountRoute))
+        guard accountRoute.exists, accountRoute.isHittable else { return }
+        accountRoute.tap()
 
         XCTAssertTrue(
             listeningModule.waitForNonExistence(timeout: 5),
-            "Expected the prior IELTS module to finish dismissing"
+            "Expected the prior IELTS module to finish replacement dismissal"
         )
         let accountModule = webModule("web-module-ielts-account")
         guard accountModule.waitForExistence(timeout: 5) else {
             XCTFail(
-                "Expected the queued account deep link to open after dismissal."
-                    + "\n\nAccessibility hierarchy after queued deep link:\n\(app.debugDescription)"
+                "Expected the queued in-process account route to open after dismissal."
+                    + "\n\nAccessibility hierarchy after route replacement:\n\(app.debugDescription)"
             )
             return
         }
-        attachScreenshot(named: "qa-account-deep-link-replayed-after-dismissal")
+        attachScreenshot(named: "qa-account-route-replayed-after-module-replacement")
         closeWebModule(accountModule, named: "web-module-ielts-account")
     }
 

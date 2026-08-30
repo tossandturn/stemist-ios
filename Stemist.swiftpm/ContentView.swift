@@ -9,20 +9,38 @@ enum AppTab: Hashable {
 }
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let configuration: AppRuntimeConfiguration
+    @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
     @State private var activeWebLaunch: WebRouteLaunch?
     @State private var pendingWebLaunch: WebRouteLaunch?
     @State private var isWebLaunchDismissing = false
 
-    init(configuration: AppRuntimeConfiguration = .current) {
+    init(
+        configuration: AppRuntimeConfiguration = .current,
+        routeCoordinator: AppRouteCoordinator = AppRouteCoordinator()
+    ) {
         self.configuration = configuration
+        _routeCoordinator = ObservedObject(wrappedValue: routeCoordinator)
     }
 
     private func normalizeSelectedTab() {
         if !configuration.showsAccountEntry && selectedTab == .profile {
             selectedTab = .today
         }
+    }
+
+    private var webLaunchPresentation: Binding<WebRouteLaunch?> {
+        Binding(
+            get: { activeWebLaunch },
+            set: { launch in
+                if activeWebLaunch != nil, launch == nil {
+                    isWebLaunchDismissing = true
+                }
+                activeWebLaunch = launch
+            }
+        )
     }
 
     private func present(_ route: WebRoute) {
@@ -32,8 +50,7 @@ struct ContentView: View {
     private func present(_ launch: WebRouteLaunch) {
         if activeWebLaunch != nil {
             pendingWebLaunch = launch
-            isWebLaunchDismissing = true
-            activeWebLaunch = nil
+            webLaunchPresentation.wrappedValue = nil
             return
         }
 
@@ -64,6 +81,23 @@ struct ContentView: View {
     private func handleWebLaunchDismissed() {
         isWebLaunchDismissing = false
         presentPendingWebLaunch()
+    }
+
+    private func consumePendingExternalURL() {
+        guard scenePhase == .active,
+              let url = routeCoordinator.takePendingURL(),
+              let launch = WebRouteLaunch(
+                  url: url,
+                  allowsAccountEntry: configuration.showsAccountEntry
+              ) else { return }
+        present(launch)
+    }
+
+    private func schedulePendingExternalURLConsumption() {
+        guard routeCoordinator.pendingURL != nil, scenePhase == .active else { return }
+        DispatchQueue.main.async {
+            consumePendingExternalURL()
+        }
     }
 
     var body: some View {
@@ -121,30 +155,28 @@ struct ContentView: View {
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        .fullScreenCover(item: $activeWebLaunch, onDismiss: handleWebLaunchDismissed) { launch in
+        .fullScreenCover(item: webLaunchPresentation, onDismiss: handleWebLaunchDismissed) { launch in
             WebModuleView(
                 launch: launch,
-                presentedLaunch: $activeWebLaunch,
-                isDismissing: $isWebLaunchDismissing
+                presentedLaunch: webLaunchPresentation,
+                requestLaunch: present
             )
                 .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         }
-        .onOpenURL { url in
-            guard let launch = WebRouteLaunch(
-                url: url,
-                allowsAccountEntry: configuration.showsAccountEntry
-            ) else { return }
-            present(launch)
-        }
         .onAppear {
             normalizeSelectedTab()
+            schedulePendingExternalURLConsumption()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
-        .onChange(of: activeWebLaunch) { previousLaunch, launch in
-            guard previousLaunch != nil, launch == nil else { return }
-            isWebLaunchDismissing = true
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            schedulePendingExternalURLConsumption()
+        }
+        .onReceive(routeCoordinator.$pendingURL) { url in
+            guard url != nil else { return }
+            schedulePendingExternalURLConsumption()
         }
         .accessibilityIdentifier("stemist-root")
     }

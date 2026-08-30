@@ -255,8 +255,8 @@ struct WebModuleView: View {
     @Environment(\.stemistAllowsAccountEntry) private var allowsAccountEntry
     let route: WebRoute
     let launchURL: URL
+    let requestLaunch: (WebRouteLaunch) -> Void
     @Binding private var presentedLaunch: WebRouteLaunch?
-    @Binding private var isDismissing: Bool
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
@@ -270,15 +270,15 @@ struct WebModuleView: View {
     init(route: WebRoute) {
         self.route = route
         launchURL = route.url
+        requestLaunch = { _ in }
         _presentedLaunch = .constant(nil)
-        _isDismissing = .constant(false)
     }
 
     init(launch: WebRouteLaunch) {
         self.init(
             launch: launch,
             presentedLaunch: .constant(nil),
-            isDismissing: .constant(false)
+            requestLaunch: { _ in }
         )
     }
 
@@ -289,19 +289,19 @@ struct WebModuleView: View {
         self.init(
             launch: launch,
             presentedLaunch: presentedLaunch,
-            isDismissing: .constant(false)
+            requestLaunch: { _ in }
         )
     }
 
     init(
         launch: WebRouteLaunch,
         presentedLaunch: Binding<WebRouteLaunch?>,
-        isDismissing: Binding<Bool>
+        requestLaunch: @escaping (WebRouteLaunch) -> Void
     ) {
         route = launch.route
         launchURL = launch.url
+        self.requestLaunch = requestLaunch
         _presentedLaunch = presentedLaunch
-        _isDismissing = isDismissing
     }
 
     private func retryLoading() {
@@ -399,10 +399,20 @@ struct WebModuleView: View {
             .navigationTitle(route.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if allowsAccountEntry, route != .ieltsAccount {
+                        Button {
+                            requestLaunch(WebRouteLaunch(route: .ieltsAccount))
+                        } label: {
+                            Image(systemName: "person.crop.circle")
+                                .frame(width: 44, height: 44)
+                        }
+                        .accessibilityLabel("Open account")
+                        .accessibilityIdentifier("web-open-account")
+                    }
+
                     Button {
                         if presentedLaunch != nil {
-                            isDismissing = true
                             presentedLaunch = nil
                         } else {
                             dismiss()
