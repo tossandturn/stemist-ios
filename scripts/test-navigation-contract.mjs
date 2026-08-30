@@ -340,12 +340,12 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
-  /app\.buttons\[visibleLabel\]/,
-  'tab navigation must use the visible accessibility label exposed by iPadOS floating tabs'
+  /app\.buttons[\s\S]*?matching\([\s\S]*?label == %@[\s\S]*?visibleLabel[\s\S]*?\)\s*\.firstMatch/,
+  'tab navigation must select the first label match because iPadOS exposes nested floating-tab buttons'
 )
 assert.match(
   shellUITests,
-  /app\.buttons\["Profile"\]/,
+  /tabButton\("Profile"\)/,
   'student mode must verify account-entry absence through the same floating-tab hierarchy used for navigation'
 )
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')

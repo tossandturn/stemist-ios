@@ -21,7 +21,7 @@ final class StemistShellUITests: XCTestCase {
     func testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks() {
         launchApp(fullFeatureTest: false)
 
-        XCTAssertFalse(app.buttons["Profile"].exists)
+        XCTAssertFalse(tabButton("Profile").exists)
         attachScreenshot(named: "student-account-entry-hidden")
 
         app.open(accountURL)
@@ -162,12 +162,18 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func selectTab(_ visibleLabel: String) {
-        let tab = app.buttons[visibleLabel]
+        let tab = tabButton(visibleLabel)
         guard tab.waitForExistence(timeout: 3) else {
             XCTFail("Expected tab \(visibleLabel) to be available.\n\n\(app.debugDescription)")
             return
         }
         tab.tap()
+    }
+
+    private func tabButton(_ visibleLabel: String) -> XCUIElement {
+        app.buttons
+            .matching(NSPredicate(format: "label == %@", visibleLabel))
+            .firstMatch
     }
 
     private func assertDashboardLearningSpace(_ identifier: String, exposesRoute routeIdentifier: String) {
