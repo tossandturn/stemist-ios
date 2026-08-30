@@ -98,17 +98,11 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
     func setPresented(_ presented: Bool) {
         record("setPresented(\(presented))")
-        // The coordinator owns presentation. SwiftUI can write false for a
-        // swipe/system dismissal; stale true writes must never resurrect a
-        // route while UIKit is still settling.
-        guard !presented else { return }
-        guard activeLaunch != nil else {
-            isPresented = false
-            return
-        }
-        isDismissing = true
-        isPresented = false
-        scheduleDismissalFallback()
+        // This binding is feedback only. SwiftUI writes the value it observes
+        // while a cover is transitioning; applying that write back to the
+        // coordinator can dismiss a newly requested route when an old false
+        // arrives late. The explicit close action owns dismissal, and
+        // `onDismiss` (plus its bounded fallback) owns completion.
     }
 
     func completeDismissal() {
@@ -336,6 +330,7 @@ struct ContentView: View {
                 dismissWorkspace: webWorkspace.dismiss,
                 onMount: acknowledgeMountedLaunch
             )
+            .interactiveDismissDisabled()
         }
         .onAppear {
             normalizeSelectedTab()

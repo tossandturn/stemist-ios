@@ -201,8 +201,8 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,260}?guard\s+!presented\s+else\s*\{\s*return\s*\}[\s\S]{0,300}?isDismissing\s*=\s*true[\s\S]{0,180}?isPresented\s*=\s*false/,
-  'the native binding must only accept system dismissal writes'
+  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,520}?binding\s+is\s+feedback\s+only[\s\S]{0,700}?explicit\s+close\s+action\s+owns\s+dismissal/,
+  'the native binding must not apply stale transition feedback to the coordinator'
 )
 assert.doesNotMatch(
   contentView,
@@ -218,6 +218,11 @@ assert.match(
   contentView,
   /private\s+var\s+workspacePresentation:\s*Binding<Bool>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.isPresented\s*\}[\s\S]{0,260}?set:\s*\{\s*value\s+in\s+webWorkspace\.setPresented\(value\)\s*\}/,
   'the coordinator must directly own the single native boolean presenter binding'
+)
+assert.match(
+  contentView,
+  /WebWorkspaceHost\([\s\S]{0,500}?\.interactiveDismissDisabled\(\)/,
+  'the web workspace must use its explicit close control instead of an untracked interactive dismissal'
 )
 assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(
