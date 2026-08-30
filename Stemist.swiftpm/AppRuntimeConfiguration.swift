@@ -15,6 +15,7 @@ extension EnvironmentValues {
 struct AppRuntimeConfiguration: Equatable {
     static let fullFeatureTestArgument = "-stemist-full-feature-test"
     static let fullFeatureTestEnvironmentKey = "STEMIST_FULL_FEATURE_TEST"
+    static let fullFeatureTestInfoKey = "STEMIST_FULL_FEATURE_TEST"
 
     let isFullFeatureTest: Bool
 
@@ -29,10 +30,15 @@ struct AppRuntimeConfiguration: Equatable {
         let environmentValue = environment[Self.fullFeatureTestEnvironmentKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        let bundleValue = Bundle.main.object(forInfoDictionaryKey: Self.fullFeatureTestInfoKey)
+            .map { String(describing: $0) }?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
         let enabledValues = Set(["1", "true", "yes"])
 
         isFullFeatureTest = arguments.contains(Self.fullFeatureTestArgument)
             || environmentValue.map(enabledValues.contains) == true
+            || bundleValue.map(enabledValues.contains) == true
     }
 
     static let current = AppRuntimeConfiguration()

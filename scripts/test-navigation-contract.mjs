@@ -25,6 +25,12 @@ const runtimeConfiguration = fs.readFileSync('Stemist.swiftpm/AppRuntimeConfigur
 
 assert.match(runtimeConfiguration, /stemist-full-feature-test/, 'full-function tests need a dedicated launch argument')
 assert.match(runtimeConfiguration, /STEMIST_FULL_FEATURE_TEST/, 'CI tests need a dedicated environment switch')
+assert.match(runtimeConfiguration, /fullFeatureTestInfoKey/, 'internal device QA builds need an explicit Info.plist switch')
+assert.match(
+  runtimeConfiguration,
+  /Bundle\.main\.object\(forInfoDictionaryKey:\s*Self\.fullFeatureTestInfoKey\)/,
+  'the runtime configuration must read the signed bundle QA switch without exposing a student-facing toggle'
+)
 assert.match(runtimeConfiguration, /showsAccountEntry/, 'runtime configuration must own account-entry visibility')
 assert.match(runtimeConfiguration, /static let current\s*=\s*AppRuntimeConfiguration\(\)/, 'normal builds must use a deterministic default configuration')
 assert.match(
@@ -382,6 +388,7 @@ assert.match(packageSwift, /\.photoLibrary\s*\(\s*purposeString:/, 'photo-librar
 assert.match(codemagic, /INFOPLIST_KEY_NSMicrophoneUsageDescription/, 'CI must inject the microphone usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSCameraUsageDescription/, 'CI must inject the camera usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSPhotoLibraryUsageDescription/, 'CI must inject the photo-library usage description')
+assert.match(codemagic, /INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES/, 'Codemagic must build a separate internal QA app with the full-feature switch')
 assert.match(codemagic, /PlistBuddy/, 'CI must verify privacy metadata in the built app')
 assert.match(codemagic, /Print :CFBundleIdentifier/, 'Codemagic must verify the stable bundle identifier')
 assert.match(codemagic, /com\.ieltsist\.stemist/, 'Codemagic must check the expected bundle identifier value')
@@ -396,6 +403,7 @@ assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify 
 assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')
 assert.match(githubWorkflow, /Print :CFBundleDisplayName/, 'macOS CI must verify the stable display name')
 assert.match(githubWorkflow, /Print :CFBundleName/, 'macOS CI must verify the stable bundle name')
+assert.match(githubWorkflow, /INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must build a separate QA app with the full-feature switch')
 
 for (const [workflowName, workflow] of [
   ['GitHub Actions', githubWorkflow],
@@ -405,7 +413,7 @@ for (const [workflowName, workflow] of [
   assert.match(workflow, /xcrun simctl bootstatus/, `${workflowName} must wait for the simulator boot to complete`)
   assert.match(workflow, /xcrun simctl install/, `${workflowName} must install the built app before launch verification`)
   assert.match(workflow, /xcrun simctl launch/, `${workflowName} must launch the app in the simulator`)
-  assert.match(workflow, /-stemist-full-feature-test/, `${workflowName} must launch the explicit full-function QA configuration`)
+  assert.match(workflow, /QA_APP_PATH/, `${workflowName} must install the separately built full-function QA app`)
   assert.match(
     workflow,
     /xcrun simctl openurl[\s\S]*?stemist:\/\/open\/ielts-account/,

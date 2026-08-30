@@ -27,6 +27,24 @@ workflows:
             INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
             INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
             build 2>&1 | tee "$CM_BUILD_DIR/build/ios/xcodebuild.log"
+      - name: Build the internal full-feature QA iOS Simulator app
+        script: |
+          set -euo pipefail
+          mkdir -p "$CM_BUILD_DIR/build/ios-qa"
+          cd "$CM_BUILD_DIR/Stemist.swiftpm"
+          xcodebuild \
+            -scheme Stemist \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/build/ios-qa" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
+            INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
+            INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
+            INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES \
+            build 2>&1 | tee "$CM_BUILD_DIR/build/ios-qa/xcodebuild.log"
       - name: Verify generated app metadata
         script: |
           set -euo pipefail
@@ -41,12 +59,18 @@ workflows:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.ieltsist.stemist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$PLIST")" = "Stemist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$PLIST")" = "Stemist"
+          QA_APP_PATH="$(find "$CM_BUILD_DIR/build/ios-qa/Build/Products" -type d -name '*.app' -print -quit)"
+          test -n "$QA_APP_PATH"
+          QA_PLIST="$QA_APP_PATH/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :STEMIST_FULL_FEATURE_TEST' "$QA_PLIST")" = "YES"
           echo "Verified privacy usage descriptions in $PLIST"
       - name: Launch normal and full-function test modes on iPad Simulator
         script: |
           set -euo pipefail
           APP_PATH="$(find "$CM_BUILD_DIR/build/ios/Build/Products" -type d -name '*.app' -print -quit)"
+          QA_APP_PATH="$(find "$CM_BUILD_DIR/build/ios-qa/Build/Products" -type d -name '*.app' -print -quit)"
           test -n "$APP_PATH"
+          test -n "$QA_APP_PATH"
           DEVICE_TYPE="$(xcrun simctl list devicetypes -j | /usr/bin/python3 -c '
           import json
           import sys
@@ -83,7 +107,8 @@ workflows:
           sleep 2
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/normal-mode.png"
           xcrun simctl terminate "$SIMULATOR_UDID" com.ieltsist.stemist || true
-          QA_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist -stemist-full-feature-test)"
+          xcrun simctl install "$SIMULATOR_UDID" "$QA_APP_PATH"
+          QA_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist)"
           test -n "$QA_PID"
           sleep 2
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-test-mode.png"
@@ -93,6 +118,8 @@ workflows:
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
       - build/ios/xcodebuild.log
+      - build/ios-qa/Build/Products/Debug-iphonesimulator/*.app
+      - build/ios-qa/xcodebuild.log
       - build/ios/normal-mode.png
       - build/ios/full-feature-test-mode.png
       - build/ios/full-feature-account-route.png
