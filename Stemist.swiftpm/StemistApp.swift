@@ -62,7 +62,36 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
             name: "Default Configuration",
             sessionRole: connectingSceneSession.role
         )
+        configuration.delegateClass = StemistSceneDelegate.self
         return configuration
+    }
+}
+
+@MainActor
+final class StemistSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    private var routeCoordinator: AppRouteCoordinator {
+        guard let appDelegate = UIApplication.shared.delegate as? StemistAppDelegate else {
+            preconditionFailure("StemistSceneDelegate requires StemistAppDelegate")
+        }
+        return appDelegate.routeCoordinator
+    }
+
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        receive(connectionOptions.urlContexts)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        receive(URLContexts)
+    }
+
+    private func receive(_ contexts: Set<UIOpenURLContext>) {
+        contexts.forEach { context in
+            routeCoordinator.receive(context.url)
+        }
     }
 }
 
