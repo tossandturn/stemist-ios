@@ -14,6 +14,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
     private var dismissalToken = UUID()
+    private var dismissalCallbackReceived = false
 
     func present(_ launch: WebRouteLaunch) {
         if activeLaunch != nil || isDismissing {
@@ -34,22 +35,28 @@ final class WebWorkspaceCoordinator: ObservableObject {
             return
         }
 
-        if activeLaunch != nil || isDismissing {
+        let hadActiveLaunch = activeLaunch != nil
+        if hadActiveLaunch {
             isDismissing = true
-            activeLaunch = nil
-            scheduleDismissalCompletion()
-            return
         }
 
         activeLaunch = launch
+        if dismissalCallbackReceived {
+            dismissalCallbackReceived = false
+            scheduleDismissalCompletion()
+        }
     }
 
     func completeDismissal() {
         // SwiftUI may invoke onDismiss before or after the binding setter. Clear
         // the source of truth first, then keep buffering until the cover is gone.
+        let hadActiveLaunch = activeLaunch != nil
+        dismissalCallbackReceived = true
         activeLaunch = nil
         isDismissing = true
-        scheduleDismissalCompletion()
+        if !hadActiveLaunch {
+            scheduleDismissalCompletion()
+        }
     }
 
     private func scheduleDismissalCompletion() {

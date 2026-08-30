@@ -167,8 +167,23 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,220}?activeLaunch\s*=\s*nil[\s\S]{0,700}?pendingLaunch[\s\S]{0,700}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
-  'the full-screen dismissal callback must be idempotent and replay the buffered route even if binding updates arrive out of order'
+  /func\s+completeDismissal\(\)[\s\S]{0,360}?activeLaunch\s*=\s*nil[\s\S]{0,360}?scheduleDismissalCompletion\(\)/,
+  'the full-screen dismissal callback must be idempotent and start the buffered-route handoff even if binding updates arrive out of order'
+)
+assert.match(
+  contentView,
+  /func\s+scheduleDismissalCompletion\(\)[\s\S]{0,900}?pendingLaunch[\s\S]{0,500}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
+  'the post-dismissal handoff must consume and replay the latest buffered route'
+)
+assert.match(
+  contentView,
+  /dismissalCallbackReceived[\s\S]{0,420}?scheduleDismissalCompletion\(\)/,
+  'an onDismiss callback that arrives before the binding setter must be retained until the binding is cleared'
+)
+assert.doesNotMatch(
+  contentView,
+  /func\s+setPresentedLaunch\(_ launch:[\s\S]{0,600}?activeLaunch\s*=\s*nil[\s\S]{0,120}?scheduleDismissalCompletion\(\)/,
+  'the binding setter must not replay a replacement before SwiftUI finishes the dismissal callback'
 )
 assert.match(
   contentView,
