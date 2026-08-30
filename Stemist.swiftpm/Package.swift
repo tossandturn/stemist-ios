@@ -7,6 +7,26 @@
 import PackageDescription
 import AppleProductTypes
 
+var targets: [Target] = [
+    .executableTarget(
+        name: "AppModule",
+        path: ".",
+        swiftSettings: [
+            .enableUpcomingFeature("BareSlashRegexLiterals")
+        ]
+    )
+]
+
+#if !SwiftPlaygrounds && !canImport(PlaygroundSupport)
+targets.append(
+    .testTarget(
+        name: "StemistShellUITests",
+        dependencies: ["AppModule"],
+        path: "../Tests/StemistShellUITests"
+    )
+)
+#endif
+
 let package = Package(
     name: "Stemist",
     platforms: [
@@ -45,13 +65,5 @@ let package = Package(
             additionalInfoPlistContentFilePath: "Info.plist"
         )
     ],
-    targets: [
-        .executableTarget(
-            name: "AppModule",
-            path: ".",
-            swiftSettings: [
-                .enableUpcomingFeature("BareSlashRegexLiterals")
-            ]
-        )
-    ]
+    targets: targets
 )

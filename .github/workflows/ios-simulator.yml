@@ -13,8 +13,10 @@ concurrency:
 
 jobs:
   simulator-build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -125,6 +127,36 @@ jobs:
           trap cleanup EXIT
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          UI_TEST_STATUS=0
+          set +e
+          xcodebuild test \
+            -scheme Stemist \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/ios-ui-tests-student" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            STEMIST_FULL_FEATURE_TEST=NO \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildHidesAccountEntryAndKeepsLearningSpacesNavigable \
+            2>&1 | tee "$GITHUB_WORKSPACE/build/ios/student-shell-ui-tests.log"
+          STUDENT_UI_TEST_STATUS=${PIPESTATUS[0]}
+          xcodebuild test \
+            -scheme Stemist \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/ios-ui-tests-qa" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            STEMIST_FULL_FEATURE_TEST=YES \
+            -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildKeepsAccountEntryAndDeepLink \
+            2>&1 | tee "$GITHUB_WORKSPACE/build/ios-qa/qa-shell-ui-tests.log"
+          QA_UI_TEST_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$STUDENT_UI_TEST_STATUS" -ne 0 ] || [ "$QA_UI_TEST_STATUS" -ne 0 ]; then
+            UI_TEST_STATUS=1
+          fi
           xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
           NORMAL_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist)"
           test -n "$NORMAL_PID"
@@ -139,16 +171,20 @@ jobs:
           xcrun simctl openurl "$SIMULATOR_UDID" "stemist://open/ielts-account"
           sleep 2
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/ios/full-feature-custom-scheme-confirmation.png"
+          exit "$UI_TEST_STATUS"
 
       - name: Upload simulator build evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: stemist-ios-simulator
           path: |
             build/ios/Build/Products/Debug-iphonesimulator/*.app
             build/ios/xcodebuild.log
+            build/ios/student-shell-ui-tests.log
             build/ios-qa/Build/Products/Debug-iphonesimulator/*.app
             build/ios-qa/xcodebuild.log
+            build/ios-qa/qa-shell-ui-tests.log
             build/ios/normal-mode.png
             build/ios/full-feature-test-mode.png
             build/ios/full-feature-custom-scheme-confirmation.png

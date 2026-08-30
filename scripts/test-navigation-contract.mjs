@@ -10,6 +10,7 @@ const gitignore = fs.readFileSync('.gitignore', 'utf8')
 const infoPlistPath = 'Stemist.swiftpm/Info.plist'
 const githubWorkflowPath = '.github/workflows/ios-simulator.yml'
 const cachedManifestPath = 'Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.plist'
+const shellUITestPath = 'Tests/StemistShellUITests/StemistShellUITests.swift'
 
 assert.ok(
   !fs.existsSync(cachedManifestPath),
@@ -232,6 +233,19 @@ assert.match(
   /additionalInfoPlistContentFilePath:\s*"Info\.plist"/,
   'the Swift Package app product must include the deep-link Info.plist'
 )
+assert.match(
+  packageSwift,
+  /#if\s+!SwiftPlaygrounds\s+&&\s+!canImport\(PlaygroundSupport\)/,
+  'the Xcode-only UI test target must not be included in Swift Playgrounds'
+)
+assert.match(packageSwift, /\.testTarget\(\s*name:\s*"StemistShellUITests"/, 'the native shell UI suite needs a dedicated test target')
+assert.ok(fs.existsSync(shellUITestPath), 'the native shell UI suite must exist')
+const shellUITests = fs.readFileSync(shellUITestPath, 'utf8')
+assert.match(shellUITests, /XCUIApplication/, 'the shell suite must launch the real app')
+assert.match(shellUITests, /testStudentBuildHidesAccountEntryAndKeepsLearningSpacesNavigable/, 'the shell suite must cover student mode')
+assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndDeepLink/, 'the shell suite must cover QA mode')
+assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
+assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 
 assert.match(
   contentView,
@@ -401,8 +415,14 @@ assert.match(codemagic, /Print :CFBundleDisplayName/, 'Codemagic must verify the
 assert.match(codemagic, /Print :CFBundleName/, 'Codemagic must verify the stable bundle name')
 assert.ok(fs.existsSync(githubWorkflowPath), 'a macOS CI build is required when Windows cannot compile Swift')
 const githubWorkflow = fs.readFileSync(githubWorkflowPath, 'utf8')
-assert.match(githubWorkflow, /runs-on:\s*macos-14|runs-on:\s*macos-latest/, 'macOS CI must use an Apple runner')
+assert.match(githubWorkflow, /runs-on:\s*macos-15/, 'macOS CI must use the macOS 15 Apple runner')
+assert.match(githubWorkflow, /DEVELOPER_DIR:\s*\/Applications\/Xcode_16\.4\.app\/Contents\/Developer/, 'macOS CI must select Xcode 16.4 for XCUIApplication deep links')
 assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must compile the iOS Simulator product')
+assert.match(githubWorkflow, /xcodebuild test/, 'macOS CI must run native shell UI tests')
+assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=NO/, 'macOS CI must run the student UI test mode')
+assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must run the QA UI test mode')
+assert.match(githubWorkflow, /student-shell-ui-tests\.log/, 'macOS CI must retain the student UI test log')
+assert.match(githubWorkflow, /qa-shell-ui-tests\.log/, 'macOS CI must retain the QA UI test log')
 assert.match(githubWorkflow, /PlistBuddy/, 'macOS CI must verify generated app metadata')
 assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify the stable bundle identifier')
 assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')
