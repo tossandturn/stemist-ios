@@ -406,6 +406,11 @@ for (const [workflowName, workflow] of [
   assert.match(workflow, /xcrun simctl install/, `${workflowName} must install the built app before launch verification`)
   assert.match(workflow, /xcrun simctl launch/, `${workflowName} must launch the app in the simulator`)
   assert.match(workflow, /-stemist-full-feature-test/, `${workflowName} must launch the explicit full-function QA configuration`)
+  assert.match(
+    workflow,
+    /xcrun simctl openurl[\s\S]*?stemist:\/\/open\/ielts-account/,
+    `${workflowName} must exercise the otherwise hidden account route only after full-function QA launch`
+  )
   assert.ok(
     (workflow.match(/xcrun simctl launch/g) ?? []).length >= 2,
     `${workflowName} must launch both normal student mode and full-function QA mode`

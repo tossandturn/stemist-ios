@@ -87,8 +87,12 @@ workflows:
           test -n "$QA_PID"
           sleep 2
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-test-mode.png"
+          xcrun simctl openurl "$SIMULATOR_UDID" "stemist://open/ielts-account"
+          sleep 2
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-account-route.png"
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
       - build/ios/xcodebuild.log
       - build/ios/normal-mode.png
       - build/ios/full-feature-test-mode.png
+      - build/ios/full-feature-account-route.png

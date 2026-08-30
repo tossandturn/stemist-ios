@@ -41,7 +41,7 @@ When a product page opens a JavaScript alert, confirm or prompt, the shell prese
 
 The Windows checkout cannot compile Swift locally. A successful Codemagic `xcodebuild` step and its generated app metadata check are required before treating the iOS package as buildable.
 
-Both cloud workflows create a disposable iPad Simulator, install the unsigned build, then launch normal student mode and the explicit full-function QA mode. They retain a screenshot of each launch as build evidence. This proves the native shell starts in both configurations; signed TestFlight installation and the authenticated, Apple Pencil, camera, microphone, upload and AI journeys still require the real-iPad acceptance matrix below.
+Both cloud workflows create a disposable iPad Simulator, install the unsigned build, then launch normal student mode and the explicit full-function QA mode. They retain a screenshot of each launch and follow the QA launch with the otherwise hidden account deep link. This proves the native shell starts in both configurations and that the account route is available only to the QA launch path; signed TestFlight installation and the authenticated, Apple Pencil, camera, microphone, upload and AI journeys still require the real-iPad acceptance matrix below.
 
 The package deployment target is iPadOS/iOS 17.0 or newer. The native shell keeps the account tab hidden in student mode, while the existing web authentication remains available inside product flows.
 
