@@ -532,8 +532,7 @@ private struct ModuleHomeView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.tertiary)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                            .contentShape(Rectangle())
+                            .frame(minHeight: 52)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Open \(route.title)")

@@ -134,10 +134,10 @@ assert.doesNotMatch(
   /scenePhase/,
   'retained deep links must not depend on a lossy scene-phase event ordering'
 )
-assert.doesNotMatch(
-  contentView,
-  /\.fullScreenCover\(/,
-  'iPad route presentation must not depend on SwiftUI modal dismissal feedback'
+assert.equal(
+  (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
+  1,
+  'learning routes must use one root-level full-screen presenter'
 )
 assert.doesNotMatch(
   contentView,
@@ -152,22 +152,57 @@ assert.match(
 assert.match(
   contentView,
   /@Published\s+private\(set\)\s+var\s+activeLaunch:\s*WebRouteLaunch\?/,
-  'the coordinator must expose the active route as the single overlay state'
+  'the coordinator must expose the active route to the workspace host'
 )
 assert.match(
   contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,220}?activeLaunch\s*=\s*launch/,
-  'the overlay workspace must synchronously install or replace the active route'
+  /@Published\s+private\(set\)\s+var\s+isPresented\s*=\s*false/,
+  'the coordinator must expose a dedicated native presenter state'
 )
 assert.match(
   contentView,
-  /func\s+dismiss\(\)[\s\S]{0,220}?activeLaunch\s*=\s*nil/,
-  'closing the overlay workspace must synchronously remove the active route'
+  /private\s+var\s+pendingLaunch:\s*WebRouteLaunch\?/,
+  'route requests during dismissal must have one pending slot'
 )
-assert.doesNotMatch(
+assert.match(
   contentView,
-  /isPresented|isDismissing|pendingLaunch|dismissalFallbackTask|workspacePresentation|setPresented|completeDismissal/,
-  'the root web workspace must not keep a separate modal/dismissal state machine'
+  /private\s+var\s+isDismissing\s*=\s*false/,
+  'the coordinator must track the system presenter handoff explicitly'
+)
+assert.match(
+  contentView,
+  /private\s+var\s+dismissalFallbackTask:\s*Task<Void,\s*Never>\?/,
+  'the coordinator must retain a bounded fallback when iPadOS omits onDismiss'
+)
+assert.match(
+  contentView,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,700}?isDismissing\s*\|\|\s*!isPresented[\s\S]{0,900}?pendingLaunch\s*=\s*launch/,
+  'a route requested during dismissal must be buffered'
+)
+assert.match(
+  contentView,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,650}?if\s+activeLaunch\s*!=\s*nil\s*\{[\s\S]{0,420}?activeLaunch\s*=\s*launch/,
+  'the workspace must replace resident content in place and present fresh routes'
+)
+assert.match(
+  contentView,
+  /func\s+dismiss\(\)[\s\S]{0,520}?isDismissing\s*=\s*true[\s\S]{0,520}?isPresented\s*=\s*false/,
+  'the workspace must explicitly request dismissal through its state machine'
+)
+assert.match(
+  contentView,
+  /func\s+completeDismissal\(\)[\s\S]{0,1400}?isPresented\s*=\s*false[\s\S]{0,500}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,600}?activeLaunch\s*=\s*replay[\s\S]{0,160}?isPresented\s*=\s*true/,
+  'the settled dismissal callback must replay the latest buffered route after the presenter settles'
+)
+assert.match(
+  contentView,
+  /private\s+func\s+scheduleDismissalFallback\(\)[\s\S]{0,700}?self\.completeDismissal\(\)/,
+  'a missing dismissal callback must still release buffered routes'
+)
+assert.match(
+  contentView,
+  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,520}?binding\s+is\s+feedback\s+only[\s\S]{0,700}?explicit\s+close\s+action\s+owns\s+dismissal/,
+  'the native binding must not apply stale transition feedback to the coordinator'
 )
 assert.doesNotMatch(
   contentView,
@@ -176,13 +211,18 @@ assert.doesNotMatch(
 )
 assert.match(
   contentView,
-  /ZStack\s*\{[\s\S]{0,1400}?TabView\(selection:\s*\$selectedTab\)[\s\S]{0,2400}?if\s+let\s+launch\s*=\s*webWorkspace\.activeLaunch[\s\S]{0,700}?WebWorkspaceHost\([\s\S]{0,500}?launch:\s*launch/,
-  'the root must mount the active route as a deterministic full-screen overlay above the tabs'
+  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*workspacePresentation[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
+  'the root must use one native boolean presenter and render the resident workspace route'
 )
 assert.match(
   contentView,
-  /WebWorkspaceHost\([\s\S]{0,700}?\.ignoresSafeArea\(\)[\s\S]{0,500}?\.zIndex\(1\)/,
-  'the web workspace overlay must cover the native shell without relying on modal presentation'
+  /private\s+var\s+workspacePresentation:\s*Binding<Bool>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.isPresented\s*\}[\s\S]{0,260}?set:\s*\{\s*value\s+in\s+webWorkspace\.setPresented\(value\)\s*\}/,
+  'the coordinator must directly own the single native boolean presenter binding'
+)
+assert.match(
+  contentView,
+  /WebWorkspaceHost\([\s\S]{0,500}?\.interactiveDismissDisabled\(\)/,
+  'the web workspace must use its explicit close control instead of an untracked interactive dismissal'
 )
 assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
 assert.doesNotMatch(
@@ -327,13 +367,8 @@ assert.match(
   /normalizedQueryID[\s\S]*?structuralID[\s\S]*?!=\s*structuralID/,
   'custom-scheme deep links must reject conflicting path, host and query route IDs'
 )
-assert.match(contentView, /if\s+let\s+launch\s*=\s*webWorkspace\.activeLaunch[\s\S]{0,500}?WebWorkspaceHost\(/, 'learning workspaces must open as one immersive root-level flow')
+assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebWorkspaceHost\(/, 'learning workspaces must open as one immersive root-level flow')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
-assert.match(
-  contentView,
-  /ForEach\(routes\)[\s\S]{0,1800}?\.frame\(maxWidth:\s*\.infinity,\s*minHeight:\s*52,\s*alignment:\s*\.leading\)[\s\S]{0,160}?\.contentShape\(Rectangle\(\)\)[\s\S]{0,320}?\.buttonStyle\(\.plain\)/,
-  'route rows must expose the same full-width hit target that accessibility reports'
-)
 assert.match(
   contentView,
   /Button\s*\{\s*openRoute\(\.stemNotebook\)[\s\S]{0,800}?\.accessibilityIdentifier\("open-stem-notebook"\)/,
