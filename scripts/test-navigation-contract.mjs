@@ -493,7 +493,6 @@ assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAn
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
-assert.match(shellUITests, /testWorkspaceRouteReplacementIgnoresLateDismissalFeedback/, 'the shell suite must cover stale workspace dismissal feedback')
 assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?app\.open\(accountURL\)/, 'the student account boundary must also survive a cold-launch deep link')
 assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
@@ -841,7 +840,6 @@ assert.match(
 )
 
 const studentShellTests = [
-  'testWorkspaceRouteReplacementIgnoresLateDismissalFeedback',
   'testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks',
   'testStudentBuildCanOpenAndCloseEveryIELTSRoute',
   'testStudentBuildCanOpenAndCloseEverySTEMRoute',

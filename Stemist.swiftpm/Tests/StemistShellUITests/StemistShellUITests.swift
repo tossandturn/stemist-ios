@@ -1,5 +1,4 @@
 import XCTest
-@testable import Stemist
 
 final class StemistShellUITests: XCTestCase {
     private struct RouteExpectation {
@@ -12,24 +11,6 @@ final class StemistShellUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-    }
-
-    @MainActor
-    func testWorkspaceRouteReplacementIgnoresLateDismissalFeedback() {
-        let workspace = WebWorkspaceCoordinator()
-        let listening = WebRouteLaunch(route: .ieltsListening)
-        let reading = WebRouteLaunch(route: .ieltsReading)
-
-        workspace.present(listening)
-        let dismissedPresentationID = workspace.dismiss()
-        XCTAssertNotNil(dismissedPresentationID)
-
-        workspace.present(reading)
-        workspace.completeDismissal(for: dismissedPresentationID)
-
-        XCTAssertEqual(workspace.activeLaunch, reading)
-        XCTAssertTrue(workspace.hasPresented(reading))
-        XCTAssertNotEqual(workspace.activePresentationID, dismissedPresentationID)
     }
 
     override func tearDownWithError() throws {

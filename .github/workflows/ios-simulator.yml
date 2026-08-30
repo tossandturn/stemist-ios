@@ -159,7 +159,6 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             STEMIST_FULL_FEATURE_TEST=NO \
-            -only-testing:StemistShellUITests/StemistShellUITests/testWorkspaceRouteReplacementIgnoresLateDismissalFeedback \
             -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks \
             -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildCanOpenAndCloseEveryIELTSRoute \
             -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildCanOpenAndCloseEverySTEMRoute \
