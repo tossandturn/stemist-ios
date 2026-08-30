@@ -5,8 +5,16 @@ const contentView = fs.readFileSync('Stemist.swiftpm/ContentView.swift', 'utf8')
 const webModule = fs.readFileSync('Stemist.swiftpm/WebModuleView.swift', 'utf8')
 const packageSwift = fs.readFileSync('Stemist.swiftpm/Package.swift', 'utf8')
 const codemagic = fs.readFileSync('codemagic.yaml', 'utf8')
+const gitignore = fs.readFileSync('.gitignore', 'utf8')
 const infoPlistPath = 'Stemist.swiftpm/Info.plist'
 const githubWorkflowPath = '.github/workflows/ios-simulator.yml'
+const cachedManifestPath = 'Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.plist'
+
+assert.ok(
+  !fs.existsSync(cachedManifestPath),
+  'stale Swift Playgrounds manifest cache must not override the checked-in package metadata'
+)
+assert.match(gitignore, /Stemist\.swiftpm\/\.swiftpm\/playgrounds\/CachedManifest\.plist/)
 
 assert.ok(
   fs.existsSync('Stemist.swiftpm/AppRuntimeConfiguration.swift'),
