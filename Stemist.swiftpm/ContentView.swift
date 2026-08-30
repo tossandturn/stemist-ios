@@ -13,6 +13,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
+    private var dismissalToken = UUID()
 
     func present(_ launch: WebRouteLaunch) {
         if activeLaunch != nil || isDismissing {
@@ -28,9 +29,18 @@ final class WebWorkspaceCoordinator: ObservableObject {
     }
 
     func setPresentedLaunch(_ launch: WebRouteLaunch?) {
-        if launch == nil, activeLaunch != nil {
-            isDismissing = true
+        guard launch == nil else {
+            activeLaunch = launch
+            return
         }
+
+        if activeLaunch != nil || isDismissing {
+            isDismissing = true
+            activeLaunch = nil
+            scheduleDismissalCompletion()
+            return
+        }
+
         activeLaunch = launch
     }
 
@@ -38,12 +48,17 @@ final class WebWorkspaceCoordinator: ObservableObject {
         // SwiftUI may invoke onDismiss before or after the binding setter. Clear
         // the source of truth first, then keep buffering until the cover is gone.
         activeLaunch = nil
-        guard isDismissing || pendingLaunch != nil else { return }
+        isDismissing = true
+        scheduleDismissalCompletion()
+    }
 
+    private func scheduleDismissalCompletion() {
+        let token = UUID()
+        dismissalToken = token
         // Let SwiftUI finish removing the old full-screen cover before replaying a route.
         Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, self.activeLaunch == nil else { return }
+            guard let self, self.dismissalToken == token, self.activeLaunch == nil else { return }
             self.isDismissing = false
             guard let pendingLaunch = self.pendingLaunch else { return }
             self.pendingLaunch = nil
