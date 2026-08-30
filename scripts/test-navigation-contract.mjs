@@ -89,18 +89,18 @@ assert.match(contentView, /@ObservedObject\s+private\s+var\s+routeCoordinator:\s
 assert.match(contentView, /takePendingURL\(\)[\s\S]{0,260}?WebRouteLaunch\([\s\S]{0,260}?present\(launch\)/, 'the root shell must consume a retained URL through the normal route presenter')
 assert.match(
   contentView,
-  /private\s+func\s+schedulePendingExternalURLConsumption\(\)[\s\S]{0,420}?scenePhase\s*==\s*\.active[\s\S]{0,420}?consumePendingExternalURL\(\)/,
-  'cold-launch route consumption must remain gated on an active scene'
+  /\.task\(id:\s*routeCoordinator\.pendingURL\)[\s\S]{0,260}?consumePendingExternalURL\(\)/,
+  'cold-launch route consumption must react to the retained URL after the root is mounted'
 )
-assert.match(
+assert.doesNotMatch(
   contentView,
-  /onChange\(of:\s*scenePhase\)[\s\S]{0,260}?phase\s*==\s*\.active[\s\S]{0,260}?schedulePendingExternalURLConsumption\(\)/,
-  'an active scene transition must schedule retained cold-launch route consumption'
+  /scenePhase|schedulePendingExternalURLConsumption/,
+  'retained deep links must not depend on a lossy scene-phase event ordering'
 )
 assert.equal(
   (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
-  1,
-  'all native and deep-link routes must share one stable root web-module presenter'
+  0,
+  'repeated learning routes must not depend on dismissing and immediately recreating a modal presenter'
 )
 assert.doesNotMatch(
   contentView,
@@ -111,59 +111,30 @@ assert.match(
   contentView,
   /@State\s+private\s+var\s+activeWebLaunch:\s*WebRouteLaunch\?/
 )
-assert.match(
+assert.doesNotMatch(
   contentView,
-  /@State\s+private\s+var\s+pendingWebLaunch:\s*WebRouteLaunch\?/
+  /pendingWebLaunch|isWebLaunchDismissing|handleWebLaunchDismissed|webLaunchPresentation/,
+  'the root workspace must not retain modal dismissal state after switching to in-place route replacement'
 )
 assert.match(
   contentView,
-  /@State\s+private\s+var\s+isWebLaunchDismissing(?:\s*:\s*Bool)?\s*=/,
-  'route replacement must distinguish an empty presenter from an in-flight dismissal'
+  /private\s+func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,180}?activeWebLaunch\s*=\s*launch/,
+  'every typed route must replace the single root workspace directly'
+)
+assert.match(
+  contentView,
+  /TabView\(selection:\s*\$selectedTab\)[\s\S]{0,2600}?\.allowsHitTesting\(activeWebLaunch\s*==\s*nil\)[\s\S]{0,200}?\.accessibilityHidden\(activeWebLaunch\s*!=\s*nil\)/,
+  'the underlying student shell must not accept touches or VoiceOver focus while a workspace is open'
+)
+assert.match(
+  contentView,
+  /if\s+let\s+launch\s*=\s*activeWebLaunch[\s\S]{0,900}?WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*\$activeWebLaunch,\s*requestLaunch:\s*present\s*\)[\s\S]{0,900}?\.zIndex\(1\)/,
+  'explicit close and in-process QA routing must share one full-screen root workspace'
 )
 assert.doesNotMatch(
   contentView,
-  /queuedWebLaunches/,
-  'a single pending route avoids stale queue entries after an already-completed dismissal'
-)
-assert.match(
-  contentView,
-  /fullScreenCover\(item:\s*webLaunchPresentation,\s*onDismiss:\s*handleWebLaunchDismissed\)/,
-  'the root presenter must serialize a route received while another module is dismissing'
-)
-assert.match(
-  contentView,
-  /pendingWebLaunch\s*=\s*launch[\s\S]{0,160}?webLaunchPresentation\.wrappedValue\s*=\s*nil/,
-  'a replacement route must request dismissal through the root presentation binding'
-)
-assert.match(
-  contentView,
-  /private\s+func\s+handleWebLaunchDismissed\(\)[\s\S]{0,320}?isWebLaunchDismissing\s*=\s*false[\s\S]{0,320}?presentPendingWebLaunch\(\)/,
-  'the queued route must be replayed only from the full-screen dismissal completion'
-)
-assert.match(
-  contentView,
-  /private\s+func\s+presentPendingWebLaunch\(\)[\s\S]{0,720}?guard\s+!isWebLaunchDismissing[\s\S]{0,720}?activeWebLaunch\s*=\s*pendingWebLaunch/,
-  'the queued route must remain blocked until dismissal has completed'
-)
-assert.match(
-  contentView,
-  /private\s+var\s+webLaunchPresentation:\s*Binding<WebRouteLaunch\?>[\s\S]{0,720}?get:\s*\{\s*activeWebLaunch\s*\}[\s\S]{0,720}?set:\s*\{\s*launch\s+in[\s\S]{0,720}?activeWebLaunch\s*!=\s*nil[\s\S]{0,720}?launch\s*==\s*nil[\s\S]{0,720}?isWebLaunchDismissing\s*=\s*true[\s\S]{0,720}?activeWebLaunch\s*=\s*launch/,
-  'the presentation binding must mark a nonnil-to-nil transition before accepting it'
-)
-assert.doesNotMatch(
-  contentView,
-  /onChange\(of:\s*activeWebLaunch\)/,
-  'active item observation can race onDismiss and permanently restore the dismissing flag'
-)
-assert.match(
-  contentView,
-  /WebModuleView\(\s*launch:\s*launch,\s*presentedLaunch:\s*webLaunchPresentation,\s*requestLaunch:\s*present\s*\)/,
-  'explicit close and in-process QA routing must share the authoritative root presenter'
-)
-assert.doesNotMatch(
-  contentView,
-  /presentNextQueuedWebLaunch/,
-  'the root presenter must not call the removed queue implementation'
+  /queuedWebLaunches|presentNextQueuedWebLaunch/,
+  'the root workspace must not call a removed modal queue implementation'
 )
 assert.match(
   webModule,
@@ -301,7 +272,7 @@ assert.match(
   /normalizedQueryID[\s\S]*?structuralID[\s\S]*?!=\s*structuralID/,
   'custom-scheme deep links must reject conflicting path, host and query route IDs'
 )
-assert.match(contentView, /fullScreenCover\(item:/, 'learning workspaces must open as immersive full-screen flows')
+assert.match(contentView, /if\s+let\s+launch\s*=\s*activeWebLaunch[\s\S]{0,1200}?\.zIndex\(1\)/, 'learning workspaces must open as one immersive root-level flow')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,

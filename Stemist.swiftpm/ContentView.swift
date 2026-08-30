@@ -9,13 +9,10 @@ enum AppTab: Hashable {
 }
 
 struct ContentView: View {
-    @Environment(\.scenePhase) private var scenePhase
     let configuration: AppRuntimeConfiguration
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
     @State private var activeWebLaunch: WebRouteLaunch?
-    @State private var pendingWebLaunch: WebRouteLaunch?
-    @State private var isWebLaunchDismissing = false
 
     init(
         configuration: AppRuntimeConfiguration = .current,
@@ -31,61 +28,16 @@ struct ContentView: View {
         }
     }
 
-    private var webLaunchPresentation: Binding<WebRouteLaunch?> {
-        Binding(
-            get: { activeWebLaunch },
-            set: { launch in
-                if activeWebLaunch != nil, launch == nil {
-                    isWebLaunchDismissing = true
-                }
-                activeWebLaunch = launch
-            }
-        )
-    }
-
     private func present(_ route: WebRoute) {
         present(WebRouteLaunch(route: route))
     }
 
     private func present(_ launch: WebRouteLaunch) {
-        if activeWebLaunch != nil {
-            pendingWebLaunch = launch
-            webLaunchPresentation.wrappedValue = nil
-            return
-        }
-
-        guard !isWebLaunchDismissing else {
-            pendingWebLaunch = launch
-            return
-        }
-
-        pendingWebLaunch = launch
-        presentPendingWebLaunch()
-    }
-
-    private func presentPendingWebLaunch() {
-        guard !isWebLaunchDismissing,
-              activeWebLaunch == nil,
-              let pendingWebLaunch else { return }
-
-        DispatchQueue.main.async {
-            guard !self.isWebLaunchDismissing,
-                  self.activeWebLaunch == nil,
-                  self.pendingWebLaunch?.id == pendingWebLaunch.id else { return }
-
-            self.pendingWebLaunch = nil
-            self.activeWebLaunch = pendingWebLaunch
-        }
-    }
-
-    private func handleWebLaunchDismissed() {
-        isWebLaunchDismissing = false
-        presentPendingWebLaunch()
+        activeWebLaunch = launch
     }
 
     private func consumePendingExternalURL() {
-        guard scenePhase == .active,
-              let url = routeCoordinator.takePendingURL(),
+        guard let url = routeCoordinator.takePendingURL(),
               let launch = WebRouteLaunch(
                   url: url,
                   allowsAccountEntry: configuration.showsAccountEntry
@@ -93,90 +45,82 @@ struct ContentView: View {
         present(launch)
     }
 
-    private func schedulePendingExternalURLConsumption() {
-        guard routeCoordinator.pendingURL != nil, scenePhase == .active else { return }
-        DispatchQueue.main.async {
-            consumePendingExternalURL()
-        }
-    }
-
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardView(selectedTab: $selectedTab, openRoute: present)
-                .tabItem { Label("Today", systemImage: "house") }
-                .tag(AppTab.today)
-                .accessibilityIdentifier("tab-today")
+        ZStack {
+            TabView(selection: $selectedTab) {
+                DashboardView(selectedTab: $selectedTab, openRoute: present)
+                    .tabItem { Label("Today", systemImage: "house") }
+                    .tag(AppTab.today)
+                    .accessibilityIdentifier("tab-today")
 
-            ModuleHomeView(
-                title: "IELTS",
-                subtitle: "Choose a skill and continue in the same IELTSist account.",
-                routes: [
-                    .ieltsListening,
-                    .ieltsReading,
-                    .ieltsWriting,
-                    .ieltsSpeaking,
-                    .ieltsVocabulary,
-                ],
-                openRoute: present
-            )
-            .tabItem { Label("IELTS", systemImage: "text.book.closed") }
-            .tag(AppTab.ielts)
-            .accessibilityIdentifier("tab-ielts")
+                ModuleHomeView(
+                    title: "IELTS",
+                    subtitle: "Choose a skill and continue in the same IELTSist account.",
+                    routes: [
+                        .ieltsListening,
+                        .ieltsReading,
+                        .ieltsWriting,
+                        .ieltsSpeaking,
+                        .ieltsVocabulary,
+                    ],
+                    openRoute: present
+                )
+                .tabItem { Label("IELTS", systemImage: "text.book.closed") }
+                .tag(AppTab.ielts)
+                .accessibilityIdentifier("tab-ielts")
 
-            ModuleHomeView(
-                title: "STEM",
-                subtitle: "Open a separate IG, AS, A2 or exam practice route.",
-                routes: [
-                    .stemIG,
-                    .stemAS,
-                    .stemA2,
-                    .stemTopics,
-                    .stemPastPapers,
-                    .stemNotebook,
-                    .stemCoach,
-                ],
-                openRoute: present
-            )
-            .tabItem { Label("STEM", systemImage: "atom") }
-            .tag(AppTab.stem)
-            .accessibilityIdentifier("tab-stem")
+                ModuleHomeView(
+                    title: "STEM",
+                    subtitle: "Open a separate IG, AS, A2 or exam practice route.",
+                    routes: [
+                        .stemIG,
+                        .stemAS,
+                        .stemA2,
+                        .stemTopics,
+                        .stemPastPapers,
+                        .stemNotebook,
+                        .stemCoach,
+                    ],
+                    openRoute: present
+                )
+                .tabItem { Label("STEM", systemImage: "atom") }
+                .tag(AppTab.stem)
+                .accessibilityIdentifier("tab-stem")
 
-            NotebookView(openRoute: present)
-                .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
-                .tag(AppTab.notebook)
-                .accessibilityIdentifier("tab-notebook")
+                NotebookView(openRoute: present)
+                    .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
+                    .tag(AppTab.notebook)
+                    .accessibilityIdentifier("tab-notebook")
 
-            if configuration.showsAccountEntry {
-                ProfileView(openRoute: present)
-                    .tabItem { Label("Profile", systemImage: "person") }
-                    .tag(AppTab.profile)
-                    .accessibilityIdentifier("tab-profile")
+                if configuration.showsAccountEntry {
+                    ProfileView(openRoute: present)
+                        .tabItem { Label("Profile", systemImage: "person") }
+                        .tag(AppTab.profile)
+                        .accessibilityIdentifier("tab-profile")
+                }
+            }
+            .allowsHitTesting(activeWebLaunch == nil)
+            .accessibilityHidden(activeWebLaunch != nil)
+
+            if let launch = activeWebLaunch {
+                WebModuleView(
+                    launch: launch,
+                    presentedLaunch: $activeWebLaunch,
+                    requestLaunch: present
+                )
+                .zIndex(1)
             }
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        .fullScreenCover(item: webLaunchPresentation, onDismiss: handleWebLaunchDismissed) { launch in
-            WebModuleView(
-                launch: launch,
-                presentedLaunch: webLaunchPresentation,
-                requestLaunch: present
-            )
-                .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        }
         .onAppear {
             normalizeSelectedTab()
-            schedulePendingExternalURLConsumption()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
-        .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
-            schedulePendingExternalURLConsumption()
-        }
-        .onReceive(routeCoordinator.$pendingURL) { url in
-            guard url != nil else { return }
-            schedulePendingExternalURLConsumption()
+        .task(id: routeCoordinator.pendingURL) {
+            consumePendingExternalURL()
         }
         .accessibilityIdentifier("stemist-root")
     }
