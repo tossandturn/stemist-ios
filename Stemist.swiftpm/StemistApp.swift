@@ -6,8 +6,21 @@ import UIKit
 final class AppRouteCoordinator: ObservableObject {
     @Published private(set) var pendingURL: URL?
 
+    private var lastAcknowledgedURL: URL?
+    private var lastAcknowledgedAt: Date?
+    private static let duplicateSuppressionInterval: TimeInterval = 2
+
     func receive(_ url: URL) {
         guard pendingURL != url else { return }
+
+        if let lastAcknowledgedURL,
+           lastAcknowledgedURL == url,
+           let lastAcknowledgedAt,
+           Date().timeIntervalSince(lastAcknowledgedAt)
+             < Self.duplicateSuppressionInterval {
+            return
+        }
+
         pendingURL = url
     }
 
@@ -18,6 +31,8 @@ final class AppRouteCoordinator: ObservableObject {
     func acknowledgePendingURL(_ url: URL) {
         guard pendingURL == url else { return }
         pendingURL = nil
+        lastAcknowledgedURL = url
+        lastAcknowledgedAt = Date()
     }
 }
 

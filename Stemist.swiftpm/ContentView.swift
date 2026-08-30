@@ -35,15 +35,17 @@ final class WebWorkspaceCoordinator: ObservableObject {
     }
 
     func completeDismissal() {
-        guard activeLaunch == nil else { return }
-        isDismissing = false
-        guard pendingLaunch != nil else { return }
+        // SwiftUI may invoke onDismiss before or after the binding setter. Clear
+        // the source of truth first, then keep buffering until the cover is gone.
+        activeLaunch = nil
+        guard isDismissing || pendingLaunch != nil else { return }
 
         // Let SwiftUI finish removing the old full-screen cover before replaying a route.
         Task { @MainActor [weak self] in
             await Task.yield()
-            guard let self, self.activeLaunch == nil, !self.isDismissing,
-                  let pendingLaunch = self.pendingLaunch else { return }
+            guard let self, self.activeLaunch == nil else { return }
+            self.isDismissing = false
+            guard let pendingLaunch = self.pendingLaunch else { return }
             self.pendingLaunch = nil
             self.activeLaunch = pendingLaunch
         }
