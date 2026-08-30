@@ -39,7 +39,56 @@ workflows:
           done
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$PLIST")" = "stemist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.ieltsist.stemist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$PLIST")" = "Stemist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$PLIST")" = "Stemist"
           echo "Verified privacy usage descriptions in $PLIST"
+      - name: Launch normal and full-function test modes on iPad Simulator
+        script: |
+          set -euo pipefail
+          APP_PATH="$(find "$CM_BUILD_DIR/build/ios/Build/Products" -type d -name '*.app' -print -quit)"
+          test -n "$APP_PATH"
+          DEVICE_TYPE="$(xcrun simctl list devicetypes -j | /usr/bin/python3 -c '
+          import json
+          import sys
+
+          device_types = json.load(sys.stdin)["devicetypes"]
+          candidates = [device["identifier"] for device in device_types if "iPad" in device["name"]]
+          if not candidates:
+              raise SystemExit("No iPad Simulator device type is available")
+          print(candidates[0])
+          ')"
+          RUNTIME="$(xcrun simctl list runtimes -j | /usr/bin/python3 -c '
+          import json
+          import sys
+
+          runtimes = [
+              runtime for runtime in json.load(sys.stdin)["runtimes"]
+              if runtime.get("isAvailable") and runtime["identifier"].startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+          ]
+          if not runtimes:
+              raise SystemExit("No available iOS Simulator runtime is installed")
+          runtimes.sort(key=lambda runtime: runtime.get("version", ""), reverse=True)
+          print(runtimes[0]["identifier"])
+          ')"
+          SIMULATOR_UDID="$(xcrun simctl create "Stemist QA iPad" "$DEVICE_TYPE" "$RUNTIME")"
+          cleanup() {
+            xcrun simctl delete "$SIMULATOR_UDID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+          NORMAL_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist)"
+          test -n "$NORMAL_PID"
+          sleep 2
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/normal-mode.png"
+          xcrun simctl terminate "$SIMULATOR_UDID" com.ieltsist.stemist || true
+          QA_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist -stemist-full-feature-test)"
+          test -n "$QA_PID"
+          sleep 2
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-test-mode.png"
     artifacts:
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
       - build/ios/xcodebuild.log
+      - build/ios/normal-mode.png
+      - build/ios/full-feature-test-mode.png

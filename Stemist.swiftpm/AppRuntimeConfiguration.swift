@@ -1,4 +1,16 @@
 import Foundation
+import SwiftUI
+
+private struct StemistAllowsAccountEntryKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var stemistAllowsAccountEntry: Bool {
+        get { self[StemistAllowsAccountEntryKey.self] }
+        set { self[StemistAllowsAccountEntryKey.self] = newValue }
+    }
+}
 
 struct AppRuntimeConfiguration: Equatable {
     static let fullFeatureTestArgument = "-stemist-full-feature-test"

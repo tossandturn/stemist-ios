@@ -5,6 +5,10 @@ import WebKit
 import SafariServices
 import UniformTypeIdentifiers
 
+private enum WebModuleTiming {
+    static let loadTimeoutNanoseconds: UInt64 = 20_000_000_000
+}
+
 final class WebViewStore: ObservableObject {
     weak var webView: WKWebView?
 
@@ -18,6 +22,31 @@ final class WebViewStore: ObservableObject {
 
     func reload() {
         webView?.reload()
+    }
+
+    func stopLoading() {
+        webView?.stopLoading()
+    }
+
+    func stopForDismissal() {
+        guard let webView else { return }
+
+        webView.stopLoading()
+        webView.evaluateJavaScript(
+            """
+            (() => {
+                document.querySelectorAll("audio, video").forEach((media) => {
+                    try { media.pause(); } catch (_) {}
+                    if (media.srcObject) {
+                        media.srcObject.getTracks().forEach((track) => {
+                            try { track.stop(); } catch (_) {}
+                        });
+                    }
+                });
+            })();
+            """,
+            completionHandler: nil
+        )
     }
 }
 
@@ -73,32 +102,199 @@ enum ExternalWebPolicy {
 
 enum WebViewEnvironment {
     static let processPool = WKProcessPool()
+    static let websiteDataStore = WKWebsiteDataStore.default()
+}
+
+private enum AccountEntryVisibilityScript {
+    static let hide = """
+    (() => {
+        const styleId = 'stemist-account-entry-visibility';
+        const selectors = [
+            '#sidebarAccountEntry',
+            '.sidebar-account-entry',
+            '.account-trigger',
+            '[aria-label="Sign in to STEM"]',
+            '[data-view="mine"]',
+            '[data-home-action="mine"]',
+            '[data-stemist-hidden-account-entry="true"]'
+        ];
+        const interactiveSelector = 'button, a, [role="button"]';
+        const markTextAccountControls = (root) => {
+            if (!root) return;
+
+            const candidates = [];
+            if (root instanceof Element && root.matches(interactiveSelector)) {
+                candidates.push(root);
+            }
+            if (typeof root.querySelectorAll === 'function') {
+                root.querySelectorAll(interactiveSelector).forEach((element) => {
+                    candidates.push(element);
+                });
+            }
+
+            candidates.forEach((element) => {
+                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text === 'Log in or create account'
+                    && !element.hasAttribute('data-stemist-hidden-account-entry')) {
+                    element.setAttribute('data-stemist-hidden-account-entry', 'true');
+                }
+            });
+        };
+        const installStyle = () => {
+            if (!document.getElementById(styleId)) {
+                const root = document.head || document.documentElement;
+                if (!root) return;
+                const style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = selectors.join(',')
+                    + '{display:none !important;visibility:hidden !important;pointer-events:none !important;}';
+                root.appendChild(style);
+            }
+        };
+        const pendingRoots = new Set();
+        let animationFrameScheduled = false;
+        const flushPendingRoots = () => {
+            animationFrameScheduled = false;
+            pendingRoots.forEach((root) => markTextAccountControls(root));
+            pendingRoots.clear();
+        };
+        const enqueueRoot = (root) => {
+            if (!root) return;
+            pendingRoots.add(root);
+            if (animationFrameScheduled) return;
+            animationFrameScheduled = true;
+            requestAnimationFrame(flushPendingRoots);
+        };
+        let started = false;
+        const start = () => {
+            if (started) return;
+            const root = document.documentElement;
+            if (!root) return;
+            started = true;
+            installStyle();
+            markTextAccountControls(root);
+
+            const observer = new MutationObserver((records) => {
+                records.forEach((record) => {
+                    if (record.type === 'characterData') {
+                        enqueueRoot(record.target.parentElement);
+                        return;
+                    }
+                    if (record.type === 'attributes') {
+                        enqueueRoot(record.target);
+                        return;
+                    }
+                    record.addedNodes.forEach((node) => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            enqueueRoot(node);
+                        } else {
+                            enqueueRoot(record.target);
+                        }
+                    });
+                });
+            });
+            observer.observe(root, {
+                childList: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['aria-label', 'class', 'data-view', 'data-home-action', 'hidden'],
+                subtree: true
+            });
+        };
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+        start();
+    })();
+    """
+}
+
+private enum CoachAutoOpenScript {
+    static let open = """
+    (() => {
+        const triggerSelectors = [
+            '[aria-label="Open AI Coach"]',
+            '#globalHelpButton',
+            '.ai-coach-trigger'
+        ];
+        let opened = false;
+        let observer;
+        let expiryTimer;
+
+        const isVisible = (element) => {
+            if (!element || element.disabled) return false;
+            const style = window.getComputedStyle(element);
+            return style.display !== 'none'
+                && style.visibility !== 'hidden'
+                && element.getClientRects().length > 0;
+        };
+        const tryOpen = () => {
+            if (opened) return;
+            const trigger = triggerSelectors
+                .map((selector) => document.querySelector(selector))
+                .find(isVisible);
+            if (!trigger) return;
+            opened = true;
+            observer?.disconnect();
+            if (expiryTimer) window.clearTimeout(expiryTimer);
+            trigger.click();
+        };
+
+        const root = document.documentElement;
+        if (!root) return;
+        observer = new MutationObserver(tryOpen);
+        observer.observe(root, { childList: true, subtree: true });
+        tryOpen();
+        expiryTimer = window.setTimeout(() => observer.disconnect(), 10_000);
+    })();
+    """
 }
 
 struct WebModuleView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.stemistAllowsAccountEntry) private var allowsAccountEntry
     let route: WebRoute
+    let launchURL: URL
     @StateObject private var webViewStore = WebViewStore()
     @State private var isLoading = true
     @State private var loadError: String?
     @State private var canGoBack = false
     @State private var canGoForward = false
     @State private var reloadToken = UUID()
+    @State private var loadWatchdogToken = UUID()
     @State private var currentURL: URL?
     @State private var showsSafari = false
+
+    init(route: WebRoute) {
+        self.route = route
+        launchURL = route.url
+    }
+
+    init(launch: WebRouteLaunch) {
+        route = launch.route
+        launchURL = launch.url
+    }
+
+    private func retryLoading() {
+        loadError = nil
+        isLoading = true
+        reloadToken = UUID()
+        loadWatchdogToken = UUID()
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 EmbeddedWebView(
-                    url: route.url,
+                    url: launchURL,
                     reloadToken: reloadToken,
                     store: webViewStore,
                     isLoading: $isLoading,
                     loadError: $loadError,
                     canGoBack: $canGoBack,
                     canGoForward: $canGoForward,
-                    currentURL: $currentURL
+                    currentURL: $currentURL,
+                    allowsAccountEntry: allowsAccountEntry,
+                    opensCoachOnLoad: route.opensCoachOnLoad,
+                    loadWatchdogToken: $loadWatchdogToken
                 )
 
                 if let errorMessage = loadError {
@@ -108,9 +304,7 @@ struct WebModuleView: View {
                         Text(errorMessage)
                     } actions: {
                         Button("Try again", systemImage: "arrow.clockwise") {
-                            loadError = nil
-                            isLoading = true
-                            reloadToken = UUID()
+                            retryLoading()
                         }
                         .buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("web-retry")
@@ -150,9 +344,7 @@ struct WebModuleView: View {
                     Spacer()
 
                     Button {
-                        reloadToken = UUID()
-                        loadError = nil
-                        isLoading = true
+                        retryLoading()
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .frame(width: 44, height: 44)
@@ -178,6 +370,7 @@ struct WebModuleView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        webViewStore.stopForDismissal()
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
@@ -188,9 +381,24 @@ struct WebModuleView: View {
                 }
             }
             .sheet(isPresented: $showsSafari) {
-                SafariView(url: currentURL ?? route.url)
+                SafariView(url: currentURL ?? launchURL)
                     .ignoresSafeArea()
             }
+            .task(id: loadWatchdogToken) {
+                do {
+                    try await Task.sleep(nanoseconds: WebModuleTiming.loadTimeoutNanoseconds)
+                    guard !Task.isCancelled, isLoading else { return }
+                    webViewStore.stopLoading()
+                    loadError = "The page is taking longer than expected. Check your connection and try again."
+                    isLoading = false
+                } catch {
+                    // Cancellation is expected when the page finishes or the view is dismissed.
+                }
+            }
+            .onDisappear {
+                webViewStore.stopForDismissal()
+            }
+            .accessibilityIdentifier("web-module-\(route.id)")
         }
     }
 }
@@ -204,15 +412,36 @@ struct EmbeddedWebView: UIViewRepresentable {
     @Binding var canGoBack: Bool
     @Binding var canGoForward: Bool
     @Binding var currentURL: URL?
+    let allowsAccountEntry: Bool
+    let opensCoachOnLoad: Bool
+    @Binding var loadWatchdogToken: UUID
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.processPool = WebViewEnvironment.processPool
-        configuration.websiteDataStore = .default()
+        configuration.websiteDataStore = WebViewEnvironment.websiteDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        if !allowsAccountEntry {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: AccountEntryVisibilityScript.hide,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
+        if opensCoachOnLoad {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: CoachAutoOpenScript.open,
+                    injectionTime: .atDocumentEnd,
+                    forMainFrameOnly: true
+                )
+            )
+        }
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
@@ -266,12 +495,18 @@ struct EmbeddedWebView: UIViewRepresentable {
             super.init()
         }
 
+        private func restartLoadWatchdog() {
+            parent.loadWatchdogToken = UUID()
+        }
+
         func load(_ url: URL, in webView: WKWebView) {
             requestedURL = url
             lastReloadToken = parent.reloadToken
+            hasRetriedAfterTermination = false
             parent.isLoading = true
             parent.loadError = nil
             parent.currentURL = url
+            restartLoadWatchdog()
             store.webView = webView
             webView.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy))
         }
@@ -283,14 +518,17 @@ struct EmbeddedWebView: UIViewRepresentable {
             parent.currentURL = webView.url ?? parent.currentURL
             guard lastReloadToken != parent.reloadToken else { return }
             lastReloadToken = parent.reloadToken
+            hasRetriedAfterTermination = false
             parent.isLoading = true
             parent.loadError = nil
+            restartLoadWatchdog()
             webView.reload()
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             parent.isLoading = true
             parent.loadError = nil
+            restartLoadWatchdog()
             updateNavigationState(webView)
         }
 
@@ -331,6 +569,7 @@ struct EmbeddedWebView: UIViewRepresentable {
             hasRetriedAfterTermination = true
             parent.isLoading = true
             parent.loadError = nil
+            restartLoadWatchdog()
             webView.reload()
         }
 
@@ -349,6 +588,79 @@ struct EmbeddedWebView: UIViewRepresentable {
                 UIApplication.shared.open(targetURL, options: [:])
             }
             return nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptAlertPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping () -> Void
+        ) {
+            presentJavaScriptDialog(from: webView) { presenter in
+                let alert = UIAlertController(
+                    title: "Message from \(frame.securityOrigin.host)",
+                    message: message,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                    completionHandler()
+                })
+                presenter.present(alert, animated: true)
+            } onUnavailable: {
+                completionHandler()
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptConfirmPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping (Bool) -> Void
+        ) {
+            presentJavaScriptDialog(from: webView) { presenter in
+                let alert = UIAlertController(
+                    title: "Confirm from \(frame.securityOrigin.host)",
+                    message: message,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                    completionHandler(false)
+                })
+                alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                    completionHandler(true)
+                })
+                presenter.present(alert, animated: true)
+            } onUnavailable: {
+                completionHandler(false)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptTextInputPanelWithPrompt prompt: String,
+            defaultText: String?,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping (String?) -> Void
+        ) {
+            presentJavaScriptDialog(from: webView) { presenter in
+                let alert = UIAlertController(
+                    title: "Input requested by \(frame.securityOrigin.host)",
+                    message: prompt,
+                    preferredStyle: .alert
+                )
+                alert.addTextField { textField in
+                    textField.text = defaultText
+                }
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                    completionHandler(nil)
+                })
+                alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                    completionHandler(alert.textFields?.first?.text)
+                })
+                presenter.present(alert, animated: true)
+            } onUnavailable: {
+                completionHandler(nil)
+            }
         }
 
 #if compiler(>=6.0)
@@ -424,6 +736,22 @@ struct EmbeddedWebView: UIViewRepresentable {
             let completion = fileUploadCompletion
             fileUploadCompletion = nil
             completion?(urls)
+        }
+
+        private func presentJavaScriptDialog(
+            from webView: WKWebView,
+            present: @escaping (UIViewController) -> Void,
+            onUnavailable: @escaping () -> Void
+        ) {
+            guard let presenter = presentingViewController(for: webView),
+                  presenter.viewIfLoaded?.window != nil,
+                  !(presenter is UIAlertController),
+                  !(presenter is UIDocumentPickerViewController) else {
+                onUnavailable()
+                return
+            }
+
+            present(presenter)
         }
 
         private func presentingViewController(for view: UIView) -> UIViewController? {

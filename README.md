@@ -16,7 +16,11 @@ The app currently provides a native tab shell and deliberately loads the existin
 
 The native account/profile entry is hidden in normal builds so students start in the learning surfaces. The account route and server authentication are still present; hiding the tab does not bypass, replace, or weaken authentication.
 
+Normal-mode WebViews also hide the known account controls rendered by IELTSist and STEM (including the guest/sign-in buttons and dashboard account action). This is presentation-only convenience, not an authorization boundary; the backend still owns every session and permission decision. The full-function test switch leaves those controls visible so login, registration, SSO and account recovery can be exercised end to end.
+
 For an explicit QA run, launch the app with either the `-stemist-full-feature-test` launch argument or `STEMIST_FULL_FEATURE_TEST=1`. This only reveals the Profile tab and account route for testing. It does not create a session, seed credentials, or grant access to another account. Keep the switch out of student-facing release launch configurations.
+
+Product deep links resolve to a typed route and retain only safe study context, including `contractVersion`, curriculum route/stage/topic, vocabulary term IDs, attempt ID and an approved IELTSist return link. OAuth callbacks, tokens, session identifiers, passwords, arbitrary query values and off-product return targets are never forwarded into the WebView.
 
 The full-function route matrix is:
 
@@ -26,6 +30,8 @@ The full-function route matrix is:
 
 For each route, verify loading, back/forward, reload, iPad portrait and landscape layout, keyboard focus, Apple Pencil/canvas input where the web surface supports it, upload cancellation and success, media permission prompts, autosave/restore, submit/result states, and a recoverable network or web-content-process failure. Use a test account and test data only.
 
+When a product page opens a JavaScript alert, confirm or prompt, the shell presents a native iPad dialog and always returns a completion result. This prevents embedded account, upload and practice flows from being stalled by a browser-only dialog.
+
 ## First cloud build
 
 1. Connect this repository in Codemagic.
@@ -34,6 +40,8 @@ For each route, verify loading, back/forward, reload, iPad portrait and landscap
 4. Add Apple Developer signing and TestFlight publishing only after the native bundle identifier and App Store Connect record are ready.
 
 The Windows checkout cannot compile Swift locally. A successful Codemagic `xcodebuild` step and its generated app metadata check are required before treating the iOS package as buildable.
+
+Both cloud workflows create a disposable iPad Simulator, install the unsigned build, then launch normal student mode and the explicit full-function QA mode. They retain a screenshot of each launch as build evidence. This proves the native shell starts in both configurations; signed TestFlight installation and the authenticated, Apple Pencil, camera, microphone, upload and AI journeys still require the real-iPad acceptance matrix below.
 
 The package deployment target is iPadOS/iOS 17.0 or newer. The native shell keeps the account tab hidden in student mode, while the existing web authentication remains available inside product flows.
 

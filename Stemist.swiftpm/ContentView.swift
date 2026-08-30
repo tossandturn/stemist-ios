@@ -11,7 +11,7 @@ enum AppTab: Hashable {
 struct ContentView: View {
     let configuration: AppRuntimeConfiguration
     @State private var selectedTab: AppTab = .today
-    @State private var deepLinkedRoute: WebRoute?
+    @State private var deepLinkedRoute: WebRouteLaunch?
 
     init(configuration: AppRuntimeConfiguration = .current) {
         self.configuration = configuration
@@ -75,11 +75,12 @@ struct ContentView: View {
             }
         }
         .tint(StemistTheme.brand)
-        .fullScreenCover(item: $deepLinkedRoute) { route in
-            WebModuleView(route: route)
+        .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
+        .fullScreenCover(item: $deepLinkedRoute) { launch in
+            WebModuleView(launch: launch)
         }
         .onOpenURL { url in
-            deepLinkedRoute = WebRoute(
+            deepLinkedRoute = WebRouteLaunch(
                 url: url,
                 allowsAccountEntry: configuration.showsAccountEntry
             )
@@ -425,18 +426,41 @@ enum WebRoute: Hashable, Identifiable {
                 return nil
             }
 
+            let routeQueryNames = Set(["route", "routeid", "route_id"])
+            let routeQueryItems = (components.queryItems ?? []).filter { item in
+                routeQueryNames.contains(item.name.lowercased())
+            }
+            guard routeQueryItems.count <= 1 else { return nil }
+
             let pathID = components.path
                 .split(separator: "/", omittingEmptySubsequences: true)
                 .last
                 .map(String.init)
             let hostID = components.host?.lowercased()
-            let queryID = components.queryItems?.first(where: { item in
-                ["route", "routeid", "route_id"].contains(item.name.lowercased())
-            })?.value
-            let candidateID = queryID ?? pathID ?? (hostID == "open" || hostID == "route" ? nil : hostID)
+            let queryID = routeQueryItems.first?.value
+            guard routeQueryItems.isEmpty || queryID != nil else { return nil }
 
-            guard let candidateID,
-                  let decodedID = candidateID.removingPercentEncoding?.lowercased(),
+            let structuralRouteIDs = [
+                pathID,
+                hostID.flatMap { id in
+                    id == "open" || id == "route" ? nil : id
+                },
+            ].compactMap { $0 }
+            let normalizedStructuralIDs = structuralRouteIDs.compactMap(Self.normalizeRouteID)
+            guard normalizedStructuralIDs.count == structuralRouteIDs.count,
+                  Set(normalizedStructuralIDs).count <= 1 else {
+                return nil
+            }
+
+            let normalizedQueryID = Self.normalizeRouteID(queryID)
+            guard queryID == nil || normalizedQueryID != nil else { return nil }
+            if let normalizedQueryID,
+               let structuralID = normalizedStructuralIDs.first,
+               normalizedQueryID != structuralID {
+                return nil
+            }
+
+            guard let decodedID = normalizedQueryID ?? normalizedStructuralIDs.first,
                   let matchingRoute = Self.all.first(where: { $0.id == decodedID }) else {
                 return nil
             }
@@ -459,6 +483,12 @@ enum WebRoute: Hashable, Identifiable {
 
     private var expectedQueryItemCount: Int {
         URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.count ?? 0
+    }
+
+    private static func normalizeRouteID(_ value: String?) -> String? {
+        value?.removingPercentEncoding?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private func matches(_ incomingURL: URL) -> Bool {
@@ -486,9 +516,10 @@ enum WebRoute: Hashable, Identifiable {
         in incomingItems: [URLQueryItem]
     ) -> Bool {
         expectedItems.allSatisfy { expectedItem in
-            incomingItems.contains { incomingItem in
-                incomingItem.name == expectedItem.name && incomingItem.value == expectedItem.value
+            let matchingItems = incomingItems.filter { incomingItem in
+                incomingItem.name.caseInsensitiveCompare(expectedItem.name) == .orderedSame
             }
+            return matchingItems.count == 1 && matchingItems.first?.value == expectedItem.value
         }
     }
 
@@ -524,6 +555,13 @@ enum WebRoute: Hashable, Identifiable {
             .stem
         case .aiCoach:
             .ai
+        }
+    }
+
+    var opensCoachOnLoad: Bool {
+        switch self {
+        case .stemCoach, .aiCoach: true
+        default: false
         }
     }
 
@@ -603,6 +641,190 @@ enum WebRoute: Hashable, Identifiable {
         case .aiCoach:
             URL(string: "https://ieltsist.com/#ai-coach")!
         }
+    }
+}
+
+/// A typed launch keeps route identity separate from the safe study context
+/// carried by a vocabulary or question return link.
+struct WebRouteLaunch: Hashable, Identifiable {
+    let route: WebRoute
+    let url: URL
+
+    var id: String {
+        "\(route.id):\(url.absoluteString)"
+    }
+
+    private static let sensitiveQueryNames: Set<String> = [
+        "api_key",
+        "apikey",
+        "authorization",
+        "access_token",
+        "id_token",
+        "refresh_token",
+        "token",
+        "code",
+        "state",
+        "session",
+        "password",
+    ]
+
+    static func sensitiveQueryName(_ name: String) -> Bool {
+        sensitiveQueryNames.contains(
+            name
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: "[]", with: "")
+        )
+    }
+
+    private static let contextQueryNames: [String: String] = [
+        "contractversion": "contractVersion",
+        "family": "family",
+        "taxonomyid": "taxonomyId",
+        "routeid": "routeId",
+        "route_id": "routeId",
+        "subjectcode": "subjectCode",
+        "specificationversion": "specificationVersion",
+        "stage": "stage",
+        "course": "course",
+        "tab": "tab",
+        "topicid": "topicId",
+        "questionpartid": "questionPartId",
+        "question_part_id": "questionPartId",
+        "termid": "termIds",
+        "termids": "termIds",
+        "term_ids": "termIds",
+        "attemptid": "attemptId",
+        "returnto": "returnTo",
+        "source": "source",
+        "sourcestatus": "sourceStatus",
+        "terminventorystatus": "termInventoryStatus",
+        "availablecount": "availableCount",
+        "focus": "focus",
+        "question": "question",
+        "part": "part",
+        "coach": "coach",
+    ]
+
+    init?(url: URL, allowsAccountEntry: Bool) {
+        guard let route = WebRoute(url: url, allowsAccountEntry: allowsAccountEntry) else {
+            return nil
+        }
+
+        self.route = route
+        self.url = Self.sanitizedURL(for: route, incomingURL: url)
+    }
+
+    private static func sanitizedURL(for route: WebRoute, incomingURL: URL) -> URL {
+        guard var destination = URLComponents(url: route.url, resolvingAgainstBaseURL: false),
+              let incoming = URLComponents(url: incomingURL, resolvingAgainstBaseURL: false) else {
+            return route.url
+        }
+
+        let baseQueryItems = destination.queryItems ?? []
+        let destinationNames = Set(baseQueryItems.map { $0.name.lowercased() })
+        var singletonContextItems: [URLQueryItem] = []
+        var termContextItems: [URLQueryItem] = []
+        var seenSingletonNames = Set<String>()
+        var seenTermValues = Set<String>()
+
+        for item in incoming.queryItems ?? [] {
+            let rawName = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedName = rawName.lowercased().replacingOccurrences(of: "[]", with: "")
+            guard !sensitiveQueryName(normalizedName),
+                  let canonicalName = contextQueryNames[normalizedName],
+                  let value = sanitizedValue(item.value, for: normalizedName),
+                  !value.isEmpty else {
+                continue
+            }
+
+            if destinationNames.contains(normalizedName) || destinationNames.contains(canonicalName.lowercased()) {
+                continue
+            }
+
+            if canonicalName == "termIds" {
+                guard value.utf8.count <= 256,
+                      termContextItems.count < 128,
+                      seenTermValues.insert(value).inserted else {
+                    continue
+                }
+                termContextItems.append(URLQueryItem(name: canonicalName, value: value))
+                continue
+            }
+
+            if seenSingletonNames.contains(canonicalName) {
+                continue
+            }
+            seenSingletonNames.insert(canonicalName)
+            singletonContextItems.append(URLQueryItem(name: canonicalName, value: value))
+        }
+
+        var contextItems = singletonContextItems + termContextItems
+        while true {
+            destination.queryItems = baseQueryItems + contextItems
+
+            if let sanitized = destination.url,
+               sanitized.absoluteString.utf8.count <= 16_000 {
+                return sanitized
+            }
+
+            guard !termContextItems.isEmpty else {
+                return route.url
+            }
+            termContextItems.removeLast()
+            contextItems = singletonContextItems + termContextItems
+        }
+    }
+
+    private static func sanitizedValue(_ value: String?, for name: String) -> String? {
+        let maxByteCount = name == "returnto" ? 2_000 : 256
+        guard let value,
+              !value.isEmpty,
+              value.utf8.count <= maxByteCount,
+              !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            return nil
+        }
+
+        if name == "returnto" {
+            guard let returnURL = URL(string: value),
+                  returnURL.user == nil,
+                  returnURL.password == nil,
+                  !(returnURL.fragment?.containsSensitiveQueryName ?? false),
+                  !returnURL.queryItemsContainSensitiveName else {
+                return nil
+            }
+
+            if let scheme = returnURL.scheme?.lowercased() {
+                guard scheme == "https",
+                      let host = returnURL.host?.lowercased(),
+                      host == "ieltsist.com" || host.hasSuffix(".ieltsist.com") else {
+                    return nil
+                }
+            } else if value.hasPrefix("//") || value.contains("\\") || !value.hasPrefix("/") {
+                return nil
+            }
+        }
+
+        return value
+    }
+}
+
+private extension URL {
+    var queryItemsContainSensitiveName: Bool {
+        guard let components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
+            return true
+        }
+        return (components.queryItems ?? []).contains { item in
+            WebRouteLaunch.sensitiveQueryName(item.name)
+        }
+    }
+}
+
+private extension String {
+    var containsSensitiveQueryName: Bool {
+        let lowercased = lowercased()
+        let sensitiveNames = ["token", "access_token", "id_token", "refresh_token", "api_key", "code", "state"]
+        return sensitiveNames.contains { lowercased.contains("\($0)=") }
     }
 }
 
