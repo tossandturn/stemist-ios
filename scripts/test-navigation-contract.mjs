@@ -89,6 +89,7 @@ assert.match(stemistApp, /configurationForConnecting[\s\S]{0,500}?connectionOpti
 assert.doesNotMatch(stemistApp, /routeCoordinator:\s*AppRouteCoordinator\?/, 'scene URL capture must not depend on a nil coordinator delegate')
 assert.match(stemistApp, /func\s+peekPendingURL\(\)\s*->\s*URL\?/, 'route coordinator must expose a non-destructive pending URL read')
 assert.match(stemistApp, /func\s+acknowledgePendingURL\(_\s+url:\s*URL\)/, 'route coordinator must acknowledge only the URL that was presented')
+assert.match(stemistApp, /func\s+receive\(_\s+url:\s*URL\)\s*\{[\s\S]{0,120}?guard\s+pendingURL\s*!=\s*url\s+else\s*\{\s*return\s*\}/, 'duplicate scene and app URL callbacks must be coalesced while a route is pending')
 assert.doesNotMatch(stemistApp, /func\s+takePendingURL\(\)/, 'route consumption must not clear a cold-launch URL before presentation succeeds')
 assert.match(contentView, /@ObservedObject\s+private\s+var\s+routeCoordinator:\s*AppRouteCoordinator/, 'the root shell must observe the app-owned route coordinator')
 assert.match(contentView, /peekPendingURL\(\)[\s\S]{0,260}?WebRouteLaunch\([\s\S]{0,260}?present\(launch\)[\s\S]{0,260}?acknowledgePendingURL\(url\)/, 'the root shell must present a retained URL before acknowledging it')

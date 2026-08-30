@@ -7,6 +7,7 @@ final class AppRouteCoordinator: ObservableObject {
     @Published private(set) var pendingURL: URL?
 
     func receive(_ url: URL) {
+        guard pendingURL != url else { return }
         pendingURL = url
     }
 
