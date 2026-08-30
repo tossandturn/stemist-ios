@@ -14,7 +14,6 @@ final class WebWorkspaceCoordinator: ObservableObject {
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
     private var dismissalToken = UUID()
-    private var dismissalCallbackReceived = false
 
     func present(_ launch: WebRouteLaunch) {
         if activeLaunch != nil || isDismissing {
@@ -30,10 +29,10 @@ final class WebWorkspaceCoordinator: ObservableObject {
     }
 
     func setPresentedLaunch(_ launch: WebRouteLaunch?) {
-        guard launch == nil else {
-            activeLaunch = launch
-            return
-        }
+        // The binding is intentionally one-way: the coordinator is the only
+        // source allowed to present a route. Ignore stale non-nil writes that
+        // SwiftUI can emit while a full-screen cover is transitioning.
+        guard launch == nil else { return }
 
         let hadActiveLaunch = activeLaunch != nil
         if hadActiveLaunch {
@@ -41,22 +40,14 @@ final class WebWorkspaceCoordinator: ObservableObject {
         }
 
         activeLaunch = launch
-        if dismissalCallbackReceived {
-            dismissalCallbackReceived = false
-            scheduleDismissalCompletion()
-        }
     }
 
     func completeDismissal() {
         // SwiftUI may invoke onDismiss before or after the binding setter. Clear
         // the source of truth first, then keep buffering until the cover is gone.
-        let hadActiveLaunch = activeLaunch != nil
-        dismissalCallbackReceived = true
         activeLaunch = nil
         isDismissing = true
-        if !hadActiveLaunch {
-            scheduleDismissalCompletion()
-        }
+        scheduleDismissalCompletion()
     }
 
     private func scheduleDismissalCompletion() {

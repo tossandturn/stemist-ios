@@ -177,13 +177,13 @@ assert.match(
 )
 assert.match(
   contentView,
-  /dismissalCallbackReceived[\s\S]{0,420}?scheduleDismissalCompletion\(\)/,
-  'an onDismiss callback that arrives before the binding setter must be retained until the binding is cleared'
+  /func\s+completeDismissal\(\)[\s\S]{0,360}?isDismissing\s*=\s*true[\s\S]{0,180}?scheduleDismissalCompletion\(\)/,
+  'onDismiss must always schedule the post-transition handoff, including when it arrives before the binding setter'
 )
 assert.doesNotMatch(
   contentView,
-  /func\s+setPresentedLaunch\(_ launch:[\s\S]{0,600}?activeLaunch\s*=\s*nil[\s\S]{0,120}?scheduleDismissalCompletion\(\)/,
-  'the binding setter must not replay a replacement before SwiftUI finishes the dismissal callback'
+  /func\s+setPresentedLaunch\(_ launch:[\s\S]{0,120}?activeLaunch\s*=\s*launch/,
+  'the binding setter must not resurrect a stale non-nil route during a transition'
 )
 assert.match(
   contentView,
