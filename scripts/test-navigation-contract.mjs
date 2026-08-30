@@ -223,6 +223,11 @@ assert.match(infoPlist, /CFBundleURLTypes/, 'Info.plist must declare URL types')
 assert.match(infoPlist, /CFBundleURLSchemes/, 'Info.plist must declare URL schemes')
 assert.match(infoPlist, /<string>stemist<\/string>/, 'Info.plist must register the stemist scheme')
 assert.match(
+  infoPlist,
+  /<key>STEMIST_FULL_FEATURE_TEST<\/key>\s*<string>\$\(STEMIST_FULL_FEATURE_TEST\)<\/string>/,
+  'Info.plist must contain the build-time QA switch used by internal device builds'
+)
+assert.match(
   packageSwift,
   /additionalInfoPlistContentFilePath:\s*"Info\.plist"/,
   'the Swift Package app product must include the deep-link Info.plist'
@@ -388,7 +393,7 @@ assert.match(packageSwift, /\.photoLibrary\s*\(\s*purposeString:/, 'photo-librar
 assert.match(codemagic, /INFOPLIST_KEY_NSMicrophoneUsageDescription/, 'CI must inject the microphone usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSCameraUsageDescription/, 'CI must inject the camera usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSPhotoLibraryUsageDescription/, 'CI must inject the photo-library usage description')
-assert.match(codemagic, /INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES/, 'Codemagic must build a separate internal QA app with the full-feature switch')
+assert.match(codemagic, /(?:^|\n)\s*STEMIST_FULL_FEATURE_TEST=YES\s*\\/, 'Codemagic must build a separate internal QA app with the full-feature switch')
 assert.match(codemagic, /PlistBuddy/, 'CI must verify privacy metadata in the built app')
 assert.match(codemagic, /Print :CFBundleIdentifier/, 'Codemagic must verify the stable bundle identifier')
 assert.match(codemagic, /com\.ieltsist\.stemist/, 'Codemagic must check the expected bundle identifier value')
@@ -403,7 +408,7 @@ assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify 
 assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')
 assert.match(githubWorkflow, /Print :CFBundleDisplayName/, 'macOS CI must verify the stable display name')
 assert.match(githubWorkflow, /Print :CFBundleName/, 'macOS CI must verify the stable bundle name')
-assert.match(githubWorkflow, /INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must build a separate QA app with the full-feature switch')
+assert.match(githubWorkflow, /(?:^|\n)\s*STEMIST_FULL_FEATURE_TEST=YES\s*\\/, 'macOS CI must build a separate QA app with the full-feature switch')
 
 for (const [workflowName, workflow] of [
   ['GitHub Actions', githubWorkflow],

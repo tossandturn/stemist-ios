@@ -44,6 +44,7 @@ jobs:
             INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
             INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
             INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
+            STEMIST_FULL_FEATURE_TEST=NO \
             build 2>&1 | tee "$GITHUB_WORKSPACE/build/ios/xcodebuild.log"
 
       - name: Build internal full-feature QA iOS Simulator app
@@ -63,7 +64,7 @@ jobs:
             INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
             INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
             INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
-            INFOPLIST_KEY_STEMIST_FULL_FEATURE_TEST=YES \
+            STEMIST_FULL_FEATURE_TEST=YES \
             build 2>&1 | tee "$GITHUB_WORKSPACE/build/ios-qa/xcodebuild.log"
 
       - name: Verify app metadata

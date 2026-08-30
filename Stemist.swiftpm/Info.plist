@@ -17,5 +17,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>STEMIST_FULL_FEATURE_TEST</key>
+	<string>$(STEMIST_FULL_FEATURE_TEST)</string>
 </dict>
 </plist>
