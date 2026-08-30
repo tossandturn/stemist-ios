@@ -184,12 +184,18 @@ struct ContentView: View {
         }
         .onAppear {
             normalizeSelectedTab()
-            consumePendingExternalURL()
+            Task { @MainActor in
+                // Give the root presenter one run-loop turn before presenting a
+                // URL captured during scene connection or cold launch.
+                await Task.yield()
+                consumePendingExternalURL()
+            }
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
         .task(id: routeCoordinator.pendingURL) {
+            await Task.yield()
             consumePendingExternalURL()
         }
         .accessibilityIdentifier("stemist-root")

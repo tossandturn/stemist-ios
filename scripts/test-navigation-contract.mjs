@@ -107,8 +107,13 @@ assert.match(
 )
 assert.match(
   contentView,
-  /\.onAppear\s*\{[\s\S]{0,220}?normalizeSelectedTab\(\)[\s\S]{0,220}?consumePendingExternalURL\(\)/,
+  /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?consumePendingExternalURL\(\)/,
   'cold-launch URL contexts received before SwiftUI observation must be consumed again when the root appears'
+)
+assert.match(
+  contentView,
+  /\.onAppear\s*\{[\s\S]{0,500}?Task\s*\{\s*@MainActor[\s\S]{0,260}?await\s+Task\.yield\(\)[\s\S]{0,180}?consumePendingExternalURL\(\)/,
+  'cold-launch presentation must wait one main-actor turn for the root presenter to mount'
 )
 assert.doesNotMatch(
   contentView,
