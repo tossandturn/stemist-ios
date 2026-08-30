@@ -15,7 +15,10 @@ enum AppTab: Hashable {
 @MainActor
 final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
-    @Published private(set) var isPresented = false
+    /// The active item is the single source of truth for native presentation.
+    /// A second published Bool can settle in a different SwiftUI transaction
+    /// on iPadOS and cause a dismiss/re-present update to be dropped.
+    var isPresented: Bool { activeLaunch != nil }
     #if DEBUG
     @Published private(set) var debugSnapshot = "0 init"
     private var debugSequence = 0
@@ -45,7 +48,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
             return
         }
 
-        if isPresented {
+        if activeLaunch != nil {
             // Keep one full-screen presenter alive and replace only its
             // resident content. This avoids a SwiftUI/UIKit teardown race
             // when a module requests another module (for example account).
@@ -57,35 +60,38 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
         pendingLaunch = nil
         activeLaunch = launch
-        isPresented = true
         record("presented(\(launch.route.id))")
     }
 
     func dismiss() {
         record("dismiss()")
-        guard activeLaunch != nil, isPresented, !isDismissing else { return }
+        guard activeLaunch != nil, !isDismissing else { return }
         isDismissing = true
-        isPresented = false
+        // Clearing the item drives the only native full-screen presenter.
+        // `onDismiss` is the settled boundary for replaying a pending route.
+        activeLaunch = nil
         record("dismiss-requested")
     }
 
-    func setPresented(_ presented: Bool) {
-        record("setPresented(\(presented))")
-        // The coordinator owns presentation. SwiftUI can write `false` for a
-        // swipe/system dismissal; a stale `true` must never resurrect content.
-        guard !presented else { return }
-        dismiss()
+    func setActiveLaunch(_ launch: WebRouteLaunch?) {
+        record("setActiveLaunch(\(launch?.route.id ?? "nil"))")
+        if let launch {
+            present(launch)
+        } else {
+            // SwiftUI writes nil for a swipe/system dismissal. A stale nil
+            // after our own dismissal is harmless and keeps this idempotent.
+            dismiss()
+        }
     }
 
     func completeDismissal() {
         record("completeDismissal()")
-        guard isDismissing || !isPresented else { return }
+        guard isDismissing || activeLaunch == nil else { return }
 
         // `onDismiss` is the presentation system's settled boundary. Do not
         // replay a pending route until this callback, rather than guessing a
         // transition duration with a timer.
         isDismissing = false
-        isPresented = false
         activeLaunch = nil
         record("dismissed")
 
@@ -96,10 +102,8 @@ final class WebWorkspaceCoordinator: ObservableObject {
             // Give SwiftUI one settled run-loop turn after onDismiss before
             // asking the same presenter to mount its next resident module.
             await Task.yield()
-            guard let self, !self.isDismissing, !self.isPresented,
-                  self.activeLaunch == nil else { return }
+            guard let self, !self.isDismissing, self.activeLaunch == nil else { return }
             self.activeLaunch = replay
-            self.isPresented = true
             self.record("replayed(\(replay.route.id))")
         }
     }
@@ -111,29 +115,21 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
 @MainActor
 private struct WebWorkspaceHost: View {
-    @ObservedObject var workspace: WebWorkspaceCoordinator
+    let launch: WebRouteLaunch
     let configuration: AppRuntimeConfiguration
     let requestLaunch: (WebRouteLaunch) -> Void
     let dismissWorkspace: () -> Void
+    let onMount: (WebRouteLaunch) -> Void
 
     var body: some View {
-        Group {
-            if let launch = workspace.activeLaunch {
-                WebModuleView(
-                    launch: launch,
-                    requestLaunch: requestLaunch,
-                    dismissWorkspace: dismissWorkspace
-                )
-                .id(launch.id)
-            } else {
-                Color.clear
-            }
-        }
+        WebModuleView(
+            launch: launch,
+            requestLaunch: requestLaunch,
+            dismissWorkspace: dismissWorkspace
+        )
+        .id(launch.id)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        #if DEBUG
-        .onAppear { workspace.recordHostEvent("host-appear") }
-        .onDisappear { workspace.recordHostEvent("host-disappear") }
-        #endif
+        .onAppear { onMount(launch) }
     }
 }
 
@@ -175,10 +171,10 @@ struct ContentView: View {
         webWorkspace.present(launch)
     }
 
-    private var workspacePresentation: Binding<Bool> {
+    private var workspacePresentation: Binding<WebRouteLaunch?> {
         Binding(
-            get: { webWorkspace.isPresented },
-            set: { webWorkspace.setPresented($0) }
+            get: { webWorkspace.activeLaunch },
+            set: { webWorkspace.setActiveLaunch($0) }
         )
     }
 
@@ -193,7 +189,17 @@ struct ContentView: View {
             return
         }
         present(launch)
-        guard webWorkspace.hasPresented(launch) else { return }
+    }
+
+    private func acknowledgeMountedLaunch(_ launch: WebRouteLaunch) {
+        guard let url = routeCoordinator.peekPendingURL(),
+              let pendingLaunch = WebRouteLaunch(
+                url: url,
+                allowsAccountEntry: configuration.showsAccountEntry
+              ),
+              pendingLaunch.id == launch.id else {
+            return
+        }
         routeCoordinator.acknowledgePendingURL(url)
     }
 
@@ -271,14 +277,15 @@ struct ContentView: View {
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .fullScreenCover(
-            isPresented: workspacePresentation,
+            item: workspacePresentation,
             onDismiss: { webWorkspace.completeDismissal() }
         ) {
-            WebWorkspaceHost(
-                workspace: webWorkspace,
+            launch in WebWorkspaceHost(
+                launch: launch,
                 configuration: configuration,
                 requestLaunch: present,
-                dismissWorkspace: webWorkspace.dismiss
+                dismissWorkspace: webWorkspace.dismiss,
+                onMount: acknowledgeMountedLaunch
             )
         }
         .onAppear {
