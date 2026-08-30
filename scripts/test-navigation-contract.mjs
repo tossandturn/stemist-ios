@@ -332,7 +332,7 @@ assert.match(shellUITests, /testStudentBuildHidesAccountEntryAndRejectsAccountDe
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'the shell suite must cover every IELTS route')
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
 assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
-assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndDeepLink/, 'the shell suite must cover QA mode')
+assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
@@ -564,6 +564,16 @@ assert.match(
 )
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=NO/, 'macOS CI must run the student UI test mode')
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must run the QA UI test mode')
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/,
+  'macOS CI must execute the complete QA learning flow'
+)
+assert.match(
+  codemagic,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/,
+  'Codemagic must execute the complete QA learning flow'
+)
 assert.match(githubWorkflow, /student-shell-ui-tests\.log/, 'macOS CI must retain the student UI test log')
 assert.match(githubWorkflow, /qa-shell-ui-tests\.log/, 'macOS CI must retain the QA UI test log')
 assert.match(githubWorkflow, /PlistBuddy/, 'macOS CI must verify generated app metadata')

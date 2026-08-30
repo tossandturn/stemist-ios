@@ -145,7 +145,7 @@ workflows:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             STEMIST_FULL_FEATURE_TEST=YES \
-            -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildKeepsAccountEntryAndDeepLink \
+            -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes \
             2>&1 | tee "$CM_BUILD_DIR/build/ios-qa/qa-shell-ui-tests.log"
           QA_UI_TEST_STATUS=${PIPESTATUS[0]}
           set -e

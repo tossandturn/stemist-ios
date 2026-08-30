@@ -21,7 +21,7 @@ final class StemistShellUITests: XCTestCase {
     func testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks() {
         launchApp(fullFeatureTest: false)
 
-        XCTAssertFalse(app.tabBars.buttons["Profile"].exists)
+        XCTAssertFalse(app.tabBars.buttons["tab-profile"].exists)
         attachScreenshot(named: "student-account-entry-hidden")
 
         app.open(accountURL)
@@ -89,10 +89,10 @@ final class StemistShellUITests: XCTestCase {
         )
     }
 
-    func testFullFeatureQABuildKeepsAccountEntryAndDeepLink() {
+    func testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes() {
         launchApp(fullFeatureTest: true)
 
-        selectTab("Profile")
+        selectTab("tab-profile")
         attachScreenshot(named: "qa-profile-entry-visible")
         openAndCloseRoute(
             buttonIdentifier: "route-ielts-account",
@@ -104,6 +104,53 @@ final class StemistShellUITests: XCTestCase {
         XCTAssertTrue(accountModule.waitForExistence(timeout: 3))
         attachScreenshot(named: "qa-account-deep-link-opened")
         closeWebModule(accountModule, named: "web-module-ielts-account")
+
+        selectTab("tab-ielts")
+        exerciseRoutes([
+            RouteExpectation(buttonIdentifier: "route-ielts-listening", moduleIdentifier: "web-module-ielts-listening"),
+            RouteExpectation(buttonIdentifier: "route-ielts-reading", moduleIdentifier: "web-module-ielts-reading"),
+            RouteExpectation(buttonIdentifier: "route-ielts-writing", moduleIdentifier: "web-module-ielts-writing"),
+            RouteExpectation(buttonIdentifier: "route-ielts-speaking", moduleIdentifier: "web-module-ielts-speaking"),
+            RouteExpectation(buttonIdentifier: "route-ielts-vocabulary", moduleIdentifier: "web-module-ielts-vocabulary"),
+        ])
+
+        selectTab("tab-stem")
+        exerciseRoutes([
+            RouteExpectation(buttonIdentifier: "route-stem-ig", moduleIdentifier: "web-module-stem-ig"),
+            RouteExpectation(buttonIdentifier: "route-stem-as", moduleIdentifier: "web-module-stem-as"),
+            RouteExpectation(buttonIdentifier: "route-stem-a2", moduleIdentifier: "web-module-stem-a2"),
+            RouteExpectation(buttonIdentifier: "route-stem-topics", moduleIdentifier: "web-module-stem-topics"),
+            RouteExpectation(buttonIdentifier: "route-stem-past-papers", moduleIdentifier: "web-module-stem-past-papers"),
+            RouteExpectation(buttonIdentifier: "route-stem-notebook", moduleIdentifier: "web-module-stem-notebook"),
+            RouteExpectation(buttonIdentifier: "route-stem-coach", moduleIdentifier: "web-module-stem-coach"),
+        ])
+
+        selectTab("tab-today")
+        assertDashboardLearningSpace(
+            "learning-space-ielts-practice",
+            exposesRoute: "route-ielts-listening"
+        )
+
+        selectTab("tab-today")
+        assertDashboardLearningSpace(
+            "learning-space-stem-study",
+            exposesRoute: "route-stem-ig"
+        )
+
+        selectTab("tab-today")
+        openAndCloseRoute(
+            buttonIdentifier: "learning-space-ai-coach",
+            moduleIdentifier: "web-module-ai-coach"
+        )
+
+        selectTab("tab-today")
+        let notebookEntry = app.buttons["open-notebook"]
+        XCTAssertTrue(notebookEntry.waitForExistence(timeout: 3))
+        notebookEntry.tap()
+        openAndCloseRoute(
+            buttonIdentifier: "open-stem-notebook",
+            moduleIdentifier: "web-module-stem-notebook"
+        )
     }
 
     private func launchApp(fullFeatureTest: Bool) {
