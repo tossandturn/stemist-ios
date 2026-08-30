@@ -249,6 +249,28 @@ assert.match(
   /<key>CFBundleName<\/key>\s*<string>Stemist<\/string>/,
   'the app bundle must keep a stable product name when display metadata is unavailable'
 )
+assert.match(
+  infoPlist,
+  /<key>CFBundleIdentifier<\/key>\s*<string>\$\(PRODUCT_BUNDLE_IDENTIFIER\)<\/string>/,
+  'the checked-in Info.plist must let the Xcode app target emit its stable bundle identifier'
+)
+assert.match(
+  infoPlist,
+  /<key>CFBundleExecutable<\/key>\s*<string>\$\(EXECUTABLE_NAME\)<\/string>/,
+  'the checked-in Info.plist must declare the app executable'
+)
+assert.match(
+  infoPlist,
+  /<key>CFBundlePackageType<\/key>\s*<string>APPL<\/string>/,
+  'the checked-in Info.plist must declare an application bundle'
+)
+for (const versionKey of ['CFBundleShortVersionString', 'CFBundleVersion']) {
+  assert.match(
+    infoPlist,
+    new RegExp(`<key>${versionKey}<\\/key>\\s*<string>\\$\\([A-Z_]+\\)<\\/string>`),
+    `the checked-in Info.plist must declare ${versionKey} for signed app artifacts`
+  )
+}
 assert.match(infoPlist, /CFBundleURLTypes/, 'Info.plist must declare URL types')
 assert.match(infoPlist, /CFBundleURLSchemes/, 'Info.plist must declare URL schemes')
 assert.match(infoPlist, /<string>stemist<\/string>/, 'Info.plist must register the stemist scheme')
