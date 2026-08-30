@@ -60,6 +60,11 @@ enum ProductWebPolicy {
         let host = (url.host ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         return host == "ieltsist.com" || host.hasSuffix(".ieltsist.com")
     }
+
+    static func isAccountEntry(_ url: URL) -> Bool {
+        guard isAllowed(url) else { return false }
+        return WebRoute(url: url, allowsAccountEntry: true) == .ieltsAccount
+    }
 }
 
 enum ExternalWebPolicy {
@@ -495,6 +500,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.scrollView.alwaysBounceVertical = true
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.keyboardDismissMode = .interactive
+        webView.scrollView.panGestureRecognizer.cancelsTouchesInView = false
         configureInputGestures(for: webView)
         store.webView = webView
         webView.accessibilityIdentifier = accessibilityIdentifier
@@ -633,6 +639,10 @@ struct EmbeddedWebView: UIViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             guard let targetURL = navigationAction.request.url else { return nil }
+
+            if !parent.allowsAccountEntry && ProductWebPolicy.isAccountEntry(targetURL) {
+                return nil
+            }
 
             if ProductWebPolicy.isAllowed(targetURL)
                 || ExternalWebPolicy.canKeepAuthenticationRedirect(targetURL, from: webView.url) {
@@ -830,6 +840,11 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let targetURL = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+
+            if !parent.allowsAccountEntry && ProductWebPolicy.isAccountEntry(targetURL) {
                 decisionHandler(.cancel)
                 return
             }

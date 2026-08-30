@@ -27,9 +27,16 @@ struct AppRuntimeConfiguration: Equatable {
         arguments: [String] = ProcessInfo.processInfo.arguments,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
+        #if DEBUG
         let environmentValue = environment[Self.fullFeatureTestEnvironmentKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        #else
+        // Release/student artifacts may not be switched into QA mode by a
+        // process environment value. The signed Info.plist flag is reserved
+        // for an explicitly produced internal QA artifact.
+        let environmentValue: String? = nil
+        #endif
         let bundleValue = Bundle.main.object(forInfoDictionaryKey: Self.fullFeatureTestInfoKey)
             .map { String(describing: $0) }?
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -56,6 +56,11 @@ assert.match(runtimeConfiguration, /showsAccountEntry/, 'runtime configuration m
 assert.match(runtimeConfiguration, /static let current\s*=\s*AppRuntimeConfiguration\(\)/, 'normal builds must use a deterministic default configuration')
 assert.match(
   runtimeConfiguration,
+  /#if DEBUG[\s\S]{0,260}fullFeatureTestEnvironmentKey[\s\S]{0,260}#else[\s\S]{0,260}let environmentValue:\s*String\?\s*=\s*nil[\s\S]{0,120}#endif/,
+  'release artifacts must not expose QA account controls through an arbitrary process environment value'
+)
+assert.match(
+  runtimeConfiguration,
   /EnvironmentValues[\s\S]*?stemistAllowsAccountEntry/,
   'account visibility must propagate to every presented web module'
 )
@@ -624,6 +629,12 @@ assert.match(webModule, /account-trigger/, 'the account visibility script must t
 assert.match(webModule, /Sign in to STEM/, 'the account visibility script must cover the STEM sign-in control')
 assert.match(webModule, /Log in or create account/, 'the account visibility script must cover the STEM content account action')
 assert.match(webModule, /allowsAccountEntry/, 'WebView configuration must receive the explicit account visibility mode')
+assert.match(webModule, /static func isAccountEntry\(_ url: URL\)/, 'the product policy must identify account navigation explicitly')
+assert.match(
+  webModule,
+  /if\s+!parent\.allowsAccountEntry\s*&&\s*ProductWebPolicy\.isAccountEntry\(targetURL\)[\s\S]{0,140}?decisionHandler\(\.cancel\)/,
+  'student WebViews must block hidden account routes even when a page navigates there programmatically'
+)
 assert.match(readme, /Normal-mode WebViews also hide the known account controls/, 'the account-hiding behavior must be documented as presentation-only')
 assert.match(readme, /Product deep links resolve to a typed route/, 'the safe deep-link context boundary must be documented for QA')
 assert.match(
