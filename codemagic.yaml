@@ -10,12 +10,30 @@ workflows:
         script: |
           set -euo pipefail
           node scripts/test-navigation-contract.mjs
-      - name: Build the Swift Playground package for iOS Simulator
+      - name: Validate the Swift Playgrounds student package
+        script: |
+          set -euo pipefail
+          mkdir -p "$CM_BUILD_DIR/build/playgrounds-student"
+          cd "$CM_BUILD_DIR/Stemist.swiftpm"
+          xcodebuild \
+            -scheme Stemist \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/build/playgrounds-student" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            INFOPLIST_KEY_NSMicrophoneUsageDescription="Use the microphone for IELTS speaking practice and voice feedback." \
+            INFOPLIST_KEY_NSCameraUsageDescription="Use the camera to capture handwritten STEM work for marking." \
+            INFOPLIST_KEY_NSPhotoLibraryUsageDescription="Choose handwritten work and source files from your photo library." \
+            STEMIST_FULL_FEATURE_TEST=NO \
+            build 2>&1 | tee "$CM_BUILD_DIR/build/playgrounds-student/xcodebuild.log"
+      - name: Build the student iOS Simulator app
         script: |
           set -euo pipefail
           mkdir -p "$CM_BUILD_DIR/build/ios"
-          cd "$CM_BUILD_DIR/Stemist.swiftpm"
           xcodebuild \
+            -project "$CM_BUILD_DIR/StemistUITests.xcodeproj" \
             -scheme Stemist \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -32,8 +50,8 @@ workflows:
         script: |
           set -euo pipefail
           mkdir -p "$CM_BUILD_DIR/build/ios-qa"
-          cd "$CM_BUILD_DIR/Stemist.swiftpm"
           xcodebuild \
+            -project "$CM_BUILD_DIR/StemistUITests.xcodeproj" \
             -scheme Stemist \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -65,13 +83,9 @@ workflows:
           QA_PLIST="$QA_APP_PATH/Info.plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :STEMIST_FULL_FEATURE_TEST' "$QA_PLIST")" = "YES"
           echo "Verified privacy usage descriptions in $PLIST"
-      - name: Launch normal and full-function test modes on iPad Simulator
+      - name: Run student and full-feature iPad UI suites
         script: |
           set -euo pipefail
-          APP_PATH="$(find "$CM_BUILD_DIR/build/ios/Build/Products" -type d -name '*.app' -print -quit)"
-          QA_APP_PATH="$(find "$CM_BUILD_DIR/build/ios-qa/Build/Products" -type d -name '*.app' -print -quit)"
-          test -n "$APP_PATH"
-          test -n "$QA_APP_PATH"
           DEVICE_TYPE="$(xcrun simctl list devicetypes -j | /usr/bin/python3 -c '
           import json
           import sys
@@ -102,25 +116,50 @@ workflows:
           trap cleanup EXIT
           xcrun simctl boot "$SIMULATOR_UDID"
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
-          NORMAL_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist)"
-          test -n "$NORMAL_PID"
-          sleep 2
-          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/normal-mode.png"
-          xcrun simctl terminate "$SIMULATOR_UDID" com.ieltsist.stemist || true
-          xcrun simctl install "$SIMULATOR_UDID" "$QA_APP_PATH"
-          QA_PID="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_UDID" com.ieltsist.stemist)"
-          test -n "$QA_PID"
-          sleep 2
-          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-test-mode.png"
-          xcrun simctl openurl "$SIMULATOR_UDID" "stemist://open/ielts-account"
-          sleep 2
-          xcrun simctl io "$SIMULATOR_UDID" screenshot "$CM_BUILD_DIR/build/ios/full-feature-custom-scheme-confirmation.png"
+          mkdir -p "$CM_BUILD_DIR/build/ios-ui-tests-student"
+          mkdir -p "$CM_BUILD_DIR/build/ios-ui-tests-qa"
+          UI_TEST_STATUS=0
+          set +e
+          xcodebuild test \
+            -project "$CM_BUILD_DIR/StemistUITests.xcodeproj" \
+            -scheme StemistShellUITests \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CM_BUILD_DIR/build/ios-ui-tests-student" \
+            -resultBundlePath "$CM_BUILD_DIR/build/ios-ui-tests-student/StemistStudentShell.xcresult" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            STEMIST_FULL_FEATURE_TEST=NO \
+            -only-testing:StemistShellUITests \
+            2>&1 | tee "$CM_BUILD_DIR/build/ios/student-shell-ui-tests.log"
+          STUDENT_UI_TEST_STATUS=${PIPESTATUS[0]}
+          xcodebuild test \
+            -project "$CM_BUILD_DIR/StemistUITests.xcodeproj" \
+            -scheme StemistShellUITests \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$CM_BUILD_DIR/build/ios-ui-tests-qa" \
+            -resultBundlePath "$CM_BUILD_DIR/build/ios-ui-tests-qa/StemistFullFeatureShell.xcresult" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            STEMIST_FULL_FEATURE_TEST=YES \
+            -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildKeepsAccountEntryAndDeepLink \
+            2>&1 | tee "$CM_BUILD_DIR/build/ios-qa/qa-shell-ui-tests.log"
+          QA_UI_TEST_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$STUDENT_UI_TEST_STATUS" -ne 0 ] || [ "$QA_UI_TEST_STATUS" -ne 0 ]; then
+            UI_TEST_STATUS=1
+          fi
+          exit "$UI_TEST_STATUS"
     artifacts:
+      - build/playgrounds-student/xcodebuild.log
       - build/ios/Build/Products/Debug-iphonesimulator/*.app
       - build/ios/xcodebuild.log
+      - build/ios/student-shell-ui-tests.log
       - build/ios-qa/Build/Products/Debug-iphonesimulator/*.app
       - build/ios-qa/xcodebuild.log
-      - build/ios/normal-mode.png
-      - build/ios/full-feature-test-mode.png
-      - build/ios/full-feature-custom-scheme-confirmation.png
+      - build/ios-qa/qa-shell-ui-tests.log
+      - build/ios-ui-tests-student/*.xcresult
+      - build/ios-ui-tests-qa/*.xcresult

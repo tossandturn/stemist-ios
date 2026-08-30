@@ -11,12 +11,25 @@ const infoPlistPath = 'Stemist.swiftpm/Info.plist'
 const githubWorkflowPath = '.github/workflows/ios-simulator.yml'
 const cachedManifestPath = 'Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.plist'
 const shellUITestPath = 'Stemist.swiftpm/Tests/StemistShellUITests/StemistShellUITests.swift'
+const xcodeProjectPath = 'StemistUITests.xcodeproj/project.pbxproj'
+const xcodeSchemePath = 'StemistUITests.xcodeproj/xcshareddata/xcschemes/StemistShellUITests.xcscheme'
 
 assert.ok(
   !fs.existsSync(cachedManifestPath),
   'stale Swift Playgrounds manifest cache must not override the checked-in package metadata'
 )
 assert.match(gitignore, /Stemist\.swiftpm\/\.swiftpm\/playgrounds\/CachedManifest\.plist/)
+
+assert.ok(
+  fs.existsSync(xcodeProjectPath),
+  'XCUIApplication needs a real Xcode app and UI-test project instead of a standalone SwiftPM test bundle'
+)
+assert.ok(
+  fs.existsSync(xcodeSchemePath),
+  'the real UI-test target needs a shared scheme for reproducible macOS CI runs'
+)
+const xcodeProject = fs.readFileSync(xcodeProjectPath, 'utf8')
+const xcodeScheme = fs.readFileSync(xcodeSchemePath, 'utf8')
 
 assert.ok(
   fs.existsSync('Stemist.swiftpm/AppRuntimeConfiguration.swift'),
@@ -243,17 +256,35 @@ assert.match(
   /additionalInfoPlistContentFilePath:\s*"Info\.plist"/,
   'the Swift Package app product must include the deep-link Info.plist'
 )
-assert.match(
+assert.doesNotMatch(
   packageSwift,
-  /#if\s+!SwiftPlaygrounds\s+&&\s+!canImport\(PlaygroundSupport\)/,
-  'the Xcode-only UI test target must not be included in Swift Playgrounds'
+  /\.testTarget\(/,
+  'SwiftPM test targets cannot supply the target application path required by XCUIApplication'
 )
 assert.match(
-  packageSwift,
-  /\.testTarget\([\s\S]*?name:\s*"StemistShellUITests"[\s\S]*?path:\s*"Tests\/StemistShellUITests"/,
-  'the native shell UI target must remain inside the Swift package root'
+  xcodeProject,
+  /productType = "com\.apple\.product-type\.application";/,
+  'the Xcode project must declare a real Stemist application target'
 )
-assert.doesNotMatch(packageSwift, /path:\s*"\.\.\/Tests\/StemistShellUITests"/, 'the native shell UI target must not escape the Swift package root')
+assert.match(
+  xcodeProject,
+  /productType = "com\.apple\.product-type\.bundle\.ui-testing";/,
+  'the shell suite must be built as a genuine UI-testing bundle'
+)
+assert.match(xcodeProject, /TEST_TARGET_NAME = Stemist;/, 'the UI test bundle must target the Stemist application')
+assert.match(xcodeProject, /USES_XCTRUNNER = YES;/, 'the UI test bundle must use Xcode\'s UI test runner')
+assert.match(
+  xcodeProject,
+  /TestTargetID = A00000000000000000000050;/,
+  'the Xcode project must bind the UI-test target to the Stemist app target'
+)
+assert.match(
+  xcodeProject,
+  /path = Stemist\.swiftpm\/Tests\/StemistShellUITests\/StemistShellUITests\.swift;/,
+  'the real UI-test target must compile the shell coverage source'
+)
+assert.match(xcodeScheme, /BlueprintName = "Stemist"/, 'the shared test scheme must build Stemist')
+assert.match(xcodeScheme, /BlueprintName = "StemistShellUITests"/, 'the shared test scheme must execute the UI suite')
 assert.ok(fs.existsSync(shellUITestPath), 'the native shell UI suite must exist')
 const shellUITests = fs.readFileSync(shellUITestPath, 'utf8')
 assert.match(shellUITests, /XCUIApplication/, 'the shell suite must launch the real app')
@@ -265,6 +296,8 @@ assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndDeepLink/,
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
+assert.match(shellUITests, /XCUIScreen\.main\.screenshot\(\)/, 'UI tests must retain rendered iPad evidence instead of relying on fixed sleeps')
+assert.match(shellUITests, /attachment\.lifetime = \.keepAlways/, 'route evidence must survive successful CI test runs')
 for (const [buttonIdentifier, moduleIdentifier] of [
   ['route-ielts-listening', 'web-module-ielts-listening'],
   ['route-ielts-reading', 'web-module-ielts-reading'],
@@ -455,6 +488,9 @@ assert.match(codemagic, /INFOPLIST_KEY_NSMicrophoneUsageDescription/, 'CI must i
 assert.match(codemagic, /INFOPLIST_KEY_NSCameraUsageDescription/, 'CI must inject the camera usage description')
 assert.match(codemagic, /INFOPLIST_KEY_NSPhotoLibraryUsageDescription/, 'CI must inject the photo-library usage description')
 assert.match(codemagic, /(?:^|\n)\s*STEMIST_FULL_FEATURE_TEST=YES\s*\\/, 'Codemagic must build a separate internal QA app with the full-feature switch')
+assert.match(codemagic, /xcodebuild test/, 'Codemagic must execute the full native shell UI suite')
+assert.match(codemagic, /-project "\$CM_BUILD_DIR\/StemistUITests\.xcodeproj"/, 'Codemagic UI tests must use the real Xcode project')
+assert.match(codemagic, /-scheme StemistShellUITests/, 'Codemagic must run the shared UI-test scheme')
 assert.match(codemagic, /PlistBuddy/, 'CI must verify privacy metadata in the built app')
 assert.match(codemagic, /Print :CFBundleIdentifier/, 'Codemagic must verify the stable bundle identifier')
 assert.match(codemagic, /com\.ieltsist\.stemist/, 'Codemagic must check the expected bundle identifier value')
@@ -468,23 +504,23 @@ assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must 
 assert.match(githubWorkflow, /xcodebuild test/, 'macOS CI must run native shell UI tests')
 assert.match(
   githubWorkflow,
-  /TEST_TARGET_NAME=Stemist/,
-  'native shell tests must declare Stemist as their target application'
+  /-project "\$GITHUB_WORKSPACE\/StemistUITests\.xcodeproj"/,
+  'native shell tests must use the real Xcode project with the configured target application'
 )
 assert.match(
   githubWorkflow,
-  /-only-testing:StemistShellUITests\s+\\/,
+  /-scheme StemistShellUITests[\s\S]*?-only-testing:StemistShellUITests\s+\\/,
   'macOS CI must run every student shell test instead of one smoke assertion'
 )
 assert.match(
   githubWorkflow,
-  /set \+e[\s\S]*?cd "\$GITHUB_WORKSPACE\/Stemist\.swiftpm"[\s\S]*?xcodebuild test[\s\S]*?STEMIST_FULL_FEATURE_TEST=NO/,
-  'macOS CI must enter the Swift package directory before the student UI test'
+  /set \+e[\s\S]*?xcodebuild test[\s\S]*?-project "\$GITHUB_WORKSPACE\/StemistUITests\.xcodeproj"[\s\S]*?STEMIST_FULL_FEATURE_TEST=NO/,
+  'macOS CI must use the app/UI-test project for the student UI test'
 )
 assert.match(
   githubWorkflow,
-  /STUDENT_UI_TEST_STATUS=\$\{PIPESTATUS\[0\]\}[\s\S]*?cd "\$GITHUB_WORKSPACE\/Stemist\.swiftpm"[\s\S]*?xcodebuild test[\s\S]*?STEMIST_FULL_FEATURE_TEST=YES/,
-  'macOS CI must enter the Swift package directory before the QA UI test'
+  /STUDENT_UI_TEST_STATUS=\$\{PIPESTATUS\[0\]\}[\s\S]*?xcodebuild test[\s\S]*?-project "\$GITHUB_WORKSPACE\/StemistUITests\.xcodeproj"[\s\S]*?STEMIST_FULL_FEATURE_TEST=YES/,
+  'macOS CI must use the app/UI-test project for the QA UI test'
 )
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=NO/, 'macOS CI must run the student UI test mode')
 assert.match(githubWorkflow, /STEMIST_FULL_FEATURE_TEST=YES/, 'macOS CI must run the QA UI test mode')
@@ -503,23 +539,11 @@ for (const [workflowName, workflow] of [
 ]) {
   assert.match(workflow, /xcrun simctl create/, `${workflowName} must create an isolated iPad simulator for launch verification`)
   assert.match(workflow, /xcrun simctl bootstatus/, `${workflowName} must wait for the simulator boot to complete`)
-  assert.match(workflow, /xcrun simctl install/, `${workflowName} must install the built app before launch verification`)
-  assert.match(workflow, /xcrun simctl launch/, `${workflowName} must launch the app in the simulator`)
-  assert.match(workflow, /QA_APP_PATH/, `${workflowName} must install the separately built full-function QA app`)
-  assert.match(
-    workflow,
-    /xcrun simctl openurl[\s\S]*?stemist:\/\/open\/ielts-account/,
-    `${workflowName} must request the QA account custom scheme to verify its system registration`
-  )
-  assert.match(
-    workflow,
-    /full-feature-custom-scheme-confirmation\.png/,
-    `${workflowName} must retain the iOS custom-scheme confirmation as smoke-test evidence`
-  )
-  assert.ok(
-    (workflow.match(/xcrun simctl launch/g) ?? []).length >= 2,
-    `${workflowName} must launch both normal student mode and full-function QA mode`
-  )
+  assert.match(workflow, /xcodebuild test/, `${workflowName} must execute the native UI suite instead of a screenshot-only smoke test`)
+  assert.match(workflow, /-scheme StemistShellUITests/, `${workflowName} must use the shared real UI-test scheme`)
+  assert.match(workflow, /-resultBundlePath/, `${workflowName} must retain the XCTest result bundle as test evidence`)
+  assert.match(workflow, /\.xcresult/, `${workflowName} must publish XCTest result bundles for both modes`)
+  assert.doesNotMatch(workflow, /\bsleep\s+2\b/, `${workflowName} must not treat a fixed two-second wait as route acceptance evidence`)
 }
 
 console.log('iOS navigation contract passed.')

@@ -9,14 +9,25 @@ final class StemistShellUITests: XCTestCase {
     private let accountURL = URL(string: "stemist://open/ielts-account")!
     private var app: XCUIApplication!
 
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        app?.terminate()
+        app = nil
+    }
+
     func testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks() {
         launchApp(fullFeatureTest: false)
 
         XCTAssertFalse(app.tabBars.buttons["Profile"].exists)
+        attachScreenshot(named: "student-account-entry-hidden")
 
         app.open(accountURL)
         XCTAssertFalse(app.otherElements["web-module-ielts-account"].waitForExistence(timeout: 1))
         XCTAssertTrue(app.otherElements["stemist-root"].exists)
+        attachScreenshot(named: "student-account-deep-link-blocked")
     }
 
     func testStudentBuildCanOpenAndCloseEveryIELTSRoute() {
@@ -82,6 +93,7 @@ final class StemistShellUITests: XCTestCase {
         launchApp(fullFeatureTest: true)
 
         selectTab("Profile")
+        attachScreenshot(named: "qa-profile-entry-visible")
         openAndCloseRoute(
             buttonIdentifier: "route-ielts-account",
             moduleIdentifier: "web-module-ielts-account"
@@ -90,6 +102,7 @@ final class StemistShellUITests: XCTestCase {
         app.open(accountURL)
         let accountModule = app.otherElements["web-module-ielts-account"]
         XCTAssertTrue(accountModule.waitForExistence(timeout: 3))
+        attachScreenshot(named: "qa-account-deep-link-opened")
         closeWebModule(accountModule, named: "web-module-ielts-account")
     }
 
@@ -98,6 +111,7 @@ final class StemistShellUITests: XCTestCase {
         app.launchEnvironment["STEMIST_FULL_FEATURE_TEST"] = fullFeatureTest ? "YES" : "NO"
         app.launch()
         XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 3))
+        attachScreenshot(named: fullFeatureTest ? "qa-launch" : "student-launch")
     }
 
     private func selectTab(_ identifier: String) {
@@ -134,6 +148,7 @@ final class StemistShellUITests: XCTestCase {
 
         let module = app.otherElements[moduleIdentifier]
         XCTAssertTrue(module.waitForExistence(timeout: 3), "Expected \(buttonIdentifier) to open \(moduleIdentifier)")
+        attachScreenshot(named: "\(moduleIdentifier)-opened")
         closeWebModule(module, named: moduleIdentifier)
     }
 
@@ -145,5 +160,12 @@ final class StemistShellUITests: XCTestCase {
         guard closeButton.exists else { return }
         closeButton.tap()
         XCTAssertFalse(module.waitForExistence(timeout: 2), "Expected \(moduleIdentifier) to close")
+    }
+
+    private func attachScreenshot(named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

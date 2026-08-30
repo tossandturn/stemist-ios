@@ -18,16 +18,6 @@ var targets: [Target] = [
     )
 ]
 
-#if !SwiftPlaygrounds && !canImport(PlaygroundSupport)
-targets.append(
-    .testTarget(
-        name: "StemistShellUITests",
-        dependencies: ["AppModule"],
-        path: "Tests/StemistShellUITests"
-    )
-)
-#endif
-
 let package = Package(
     name: "Stemist",
     platforms: [
