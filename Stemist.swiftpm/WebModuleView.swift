@@ -28,10 +28,9 @@ final class WebViewStore: ObservableObject {
         webView?.stopLoading()
     }
 
-    func stopForDismissal() {
+    func pauseForHiding() {
         guard let webView else { return }
 
-        webView.stopLoading()
         webView.evaluateJavaScript(
             """
             (() => {
@@ -47,6 +46,11 @@ final class WebViewStore: ObservableObject {
             """,
             completionHandler: nil
         )
+    }
+
+    func stopForDismissal() {
+        webView?.stopLoading()
+        pauseForHiding()
     }
 }
 
@@ -412,12 +416,12 @@ struct WebModuleView: View {
                     }
 
                     Button {
+                        webViewStore.pauseForHiding()
                         if presentedLaunch != nil {
                             presentedLaunch = nil
                         } else {
                             dismiss()
                         }
-                        webViewStore.stopForDismissal()
                     } label: {
                         Image(systemName: "xmark")
                             .frame(width: 44, height: 44)
@@ -479,16 +483,6 @@ struct EmbeddedWebView: UIViewRepresentable {
                 )
             )
         }
-        if opensCoachOnLoad {
-            configuration.userContentController.addUserScript(
-                WKUserScript(
-                    source: CoachAutoOpenScript.open,
-                    injectionTime: .atDocumentEnd,
-                    forMainFrameOnly: true
-                )
-            )
-        }
-
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
@@ -545,6 +539,14 @@ struct EmbeddedWebView: UIViewRepresentable {
             parent.loadWatchdogToken = UUID()
         }
 
+        private func openCoachIfRequested(in webView: WKWebView) {
+            guard parent.opensCoachOnLoad else { return }
+            webView.evaluateJavaScript(
+                CoachAutoOpenScript.open,
+                completionHandler: nil
+            )
+        }
+
         func load(_ url: URL, in webView: WKWebView) {
             requestedURL = url
             lastReloadToken = parent.reloadToken
@@ -587,6 +589,7 @@ struct EmbeddedWebView: UIViewRepresentable {
             parent.loadError = nil
             hasRetriedAfterTermination = false
             updateNavigationState(webView)
+            openCoachIfRequested(in: webView)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

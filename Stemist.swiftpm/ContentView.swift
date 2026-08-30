@@ -13,6 +13,9 @@ struct ContentView: View {
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
     @State private var activeWebLaunch: WebRouteLaunch?
+    @State private var retainedWebLaunch: WebRouteLaunch?
+    @State private var pendingWebLaunch: WebRouteLaunch?
+    @State private var isWebWorkspaceClosing = false
 
     init(
         configuration: AppRuntimeConfiguration = .current,
@@ -32,17 +35,47 @@ struct ContentView: View {
         present(WebRouteLaunch(route: route))
     }
 
+    private func setActiveWebLaunch(_ launch: WebRouteLaunch?) {
+        if launch == nil, activeWebLaunch != nil {
+            isWebWorkspaceClosing = true
+            activeWebLaunch = nil
+            DispatchQueue.main.async {
+                guard self.isWebWorkspaceClosing else { return }
+                self.isWebWorkspaceClosing = false
+                guard let pendingWebLaunch = self.pendingWebLaunch else { return }
+                self.pendingWebLaunch = nil
+                self.retainedWebLaunch = pendingWebLaunch
+                self.activeWebLaunch = pendingWebLaunch
+            }
+            return
+        }
+
+        if let launch {
+            retainedWebLaunch = launch
+        }
+        activeWebLaunch = launch
+    }
+
     private func present(_ launch: WebRouteLaunch) {
+        guard !isWebWorkspaceClosing else {
+            pendingWebLaunch = launch
+            return
+        }
+        retainedWebLaunch = launch
         activeWebLaunch = launch
     }
 
     private func consumePendingExternalURL() {
-        guard let url = routeCoordinator.takePendingURL(),
-              let launch = WebRouteLaunch(
-                  url: url,
-                  allowsAccountEntry: configuration.showsAccountEntry
-              ) else { return }
+        guard let url = routeCoordinator.peekPendingURL() else { return }
+        guard let launch = WebRouteLaunch(
+            url: url,
+            allowsAccountEntry: configuration.showsAccountEntry
+        ) else {
+            routeCoordinator.acknowledgePendingURL(url)
+            return
+        }
         present(launch)
+        routeCoordinator.acknowledgePendingURL(url)
     }
 
     var body: some View {
@@ -102,14 +135,16 @@ struct ContentView: View {
             .allowsHitTesting(activeWebLaunch == nil)
             .accessibilityHidden(activeWebLaunch != nil)
 
-            if let launch = activeWebLaunch {
-                WebModuleView(
-                    launch: launch,
-                    presentedLaunch: $activeWebLaunch,
-                    requestLaunch: present
-                )
-                .zIndex(1)
-            }
+            WebWorkspaceHost(
+                retainedLaunch: retainedWebLaunch,
+                isPresented: activeWebLaunch != nil,
+                presentedLaunch: Binding(
+                    get: { activeWebLaunch },
+                    set: setActiveWebLaunch
+                ),
+                requestLaunch: present
+            )
+            .zIndex(1)
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
@@ -123,6 +158,28 @@ struct ContentView: View {
             consumePendingExternalURL()
         }
         .accessibilityIdentifier("stemist-root")
+    }
+}
+
+private struct WebWorkspaceHost: View {
+    let retainedLaunch: WebRouteLaunch?
+    let isPresented: Bool
+    @Binding var presentedLaunch: WebRouteLaunch?
+    let requestLaunch: (WebRouteLaunch) -> Void
+
+    var body: some View {
+        Group {
+            if let launch = retainedLaunch {
+                WebModuleView(
+                    launch: launch,
+                    presentedLaunch: $presentedLaunch,
+                    requestLaunch: requestLaunch
+                )
+            }
+        }
+        .opacity(isPresented ? 1 : 0)
+        .allowsHitTesting(isPresented)
+        .accessibilityHidden(!isPresented)
     }
 }
 

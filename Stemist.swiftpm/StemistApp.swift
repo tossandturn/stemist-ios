@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AppRouteCoordinator: ObservableObject {
@@ -9,21 +10,46 @@ final class AppRouteCoordinator: ObservableObject {
         pendingURL = url
     }
 
-    func takePendingURL() -> URL? {
-        defer { pendingURL = nil }
+    func peekPendingURL() -> URL? {
         return pendingURL
+    }
+
+    func acknowledgePendingURL(_ url: URL) {
+        guard pendingURL == url else { return }
+        pendingURL = nil
+    }
+}
+
+@MainActor
+final class StemistAppDelegate: NSObject, UIApplicationDelegate {
+    let routeCoordinator = AppRouteCoordinator()
+
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        connectionOptions.urlContexts.forEach { context in
+            routeCoordinator.receive(context.url)
+        }
+
+        let configuration = UISceneConfiguration(
+            name: "Default Configuration",
+            sessionRole: connectingSceneSession.role
+        )
+        return configuration
     }
 }
 
 @main
 struct StemistApp: App {
-    @StateObject private var routeCoordinator = AppRouteCoordinator()
+    @UIApplicationDelegateAdaptor(StemistAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         WindowGroup {
-            ContentView(routeCoordinator: routeCoordinator)
+            ContentView(routeCoordinator: appDelegate.routeCoordinator)
                 .onOpenURL { url in
-                    routeCoordinator.receive(url)
+                    appDelegate.routeCoordinator.receive(url)
                 }
         }
     }
