@@ -23,7 +23,7 @@
 ### Task 1: Add Native Shell UI Coverage
 
 **Files:**
-- Create: `Tests/StemistShellUITests/StemistShellUITests.swift`
+- Create: `Stemist.swiftpm/Tests/StemistShellUITests/StemistShellUITests.swift`
 - Modify: `Stemist.swiftpm/Package.swift`
 - Modify: `.github/workflows/ios-simulator.yml`
 - Modify: `scripts/test-navigation-contract.mjs`

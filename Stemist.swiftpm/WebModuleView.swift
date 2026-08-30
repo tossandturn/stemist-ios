@@ -304,9 +304,53 @@ struct WebModuleView: View {
         loadWatchdogToken = UUID()
     }
 
+    private var workspaceHeader: some View {
+        HStack(spacing: 12) {
+            Image(systemName: route.symbol)
+                .foregroundStyle(route.tint)
+                .accessibilityHidden(true)
+            Text(route.title)
+                .font(.headline)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+
+            if allowsAccountEntry, route != .ieltsAccount {
+                Button {
+                    requestLaunch(WebRouteLaunch(route: .ieltsAccount))
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Open account")
+                .accessibilityIdentifier("web-open-account")
+                .help("Open account")
+            }
+
+            Button {
+                webViewStore.pauseForHiding()
+                dismissWorkspace()
+            } label: {
+                Image(systemName: "xmark")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Close \(route.title)")
+            .accessibilityIdentifier("web-close")
+            .help("Close")
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
     var body: some View {
-        NavigationStack {
-            ZStack {
+        VStack(spacing: 0) {
+            workspaceHeader
+
+            NavigationStack {
+                ZStack {
                 EmbeddedWebView(
                     url: launchURL,
                     reloadToken: reloadToken,
@@ -322,7 +366,7 @@ struct WebModuleView: View {
                     loadWatchdogToken: $loadWatchdogToken
                 )
 
-                if let errorMessage = loadError {
+                    if let errorMessage = loadError {
                     ContentUnavailableView {
                         Label("Unable to load \(route.title)", systemImage: "wifi.exclamationmark")
                     } description: {
@@ -337,14 +381,14 @@ struct WebModuleView: View {
                     .padding(24)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding(20)
-                } else if isLoading {
+                    } else if isLoading {
                     ProgressView("Loading...")
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
                 }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+                .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 18) {
                     Button {
                         webViewStore.goBack()
@@ -389,38 +433,12 @@ struct WebModuleView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 .background(.bar)
-            }
-            .navigationTitle(route.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if allowsAccountEntry, route != .ieltsAccount {
-                        Button {
-                            requestLaunch(WebRouteLaunch(route: .ieltsAccount))
-                        } label: {
-                            Image(systemName: "person.crop.circle")
-                                .frame(width: 44, height: 44)
-                        }
-                        .accessibilityLabel("Open account")
-                        .accessibilityIdentifier("web-open-account")
-                    }
-
-                    Button {
-                        webViewStore.pauseForHiding()
-                        dismissWorkspace()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Close \(route.title)")
-                    .accessibilityIdentifier("web-close")
                 }
-            }
-            .sheet(isPresented: $showsSafari) {
+                .sheet(isPresented: $showsSafari) {
                 SafariView(url: currentURL ?? launchURL)
                     .ignoresSafeArea()
-            }
-            .task(id: loadWatchdogToken) {
+                }
+                .task(id: loadWatchdogToken) {
                 do {
                     try await Task.sleep(nanoseconds: WebModuleTiming.loadTimeoutNanoseconds)
                     guard !Task.isCancelled, isLoading else { return }
@@ -430,12 +448,14 @@ struct WebModuleView: View {
                 } catch {
                     // Cancellation is expected when the page finishes or the view is dismissed.
                 }
-            }
-            .onDisappear {
-                webViewStore.stopForDismissal()
+                }
+                .onDisappear {
+                    webViewStore.stopForDismissal()
+                }
             }
             .accessibilityIdentifier("web-module-\(route.id)")
         }
+        .background(StemistTheme.background)
     }
 }
 

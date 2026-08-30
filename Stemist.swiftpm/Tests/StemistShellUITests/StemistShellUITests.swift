@@ -1,4 +1,5 @@
 import XCTest
+@testable import Stemist
 
 final class StemistShellUITests: XCTestCase {
     private struct RouteExpectation {
@@ -11,6 +12,24 @@ final class StemistShellUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    @MainActor
+    func testWorkspaceRouteReplacementIgnoresLateDismissalFeedback() {
+        let workspace = WebWorkspaceCoordinator()
+        let listening = WebRouteLaunch(route: .ieltsListening)
+        let reading = WebRouteLaunch(route: .ieltsReading)
+
+        workspace.present(listening)
+        let dismissedPresentationID = workspace.dismiss()
+        XCTAssertNotNil(dismissedPresentationID)
+
+        workspace.present(reading)
+        workspace.completeDismissal(for: dismissedPresentationID)
+
+        XCTAssertEqual(workspace.activeLaunch, reading)
+        XCTAssertTrue(workspace.hasPresented(reading))
+        XCTAssertNotEqual(workspace.activePresentationID, dismissedPresentationID)
     }
 
     override func tearDownWithError() throws {
@@ -220,7 +239,27 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func tabButton(_ visibleLabel: String) -> XCUIElement {
-        app.buttons
+        let identifier: String
+        switch visibleLabel {
+        case "Today":
+            identifier = "tab-today"
+        case "IELTS":
+            identifier = "tab-ielts"
+        case "STEM":
+            identifier = "tab-stem"
+        case "Notebook":
+            identifier = "tab-notebook"
+        case "Profile":
+            identifier = "tab-profile"
+        default:
+            identifier = visibleLabel
+        }
+
+        if ["Today", "IELTS", "STEM", "Notebook", "Profile"].contains(visibleLabel) {
+            return app.buttons[identifier]
+        }
+
+        return app.buttons
             .matching(NSPredicate(format: "label == %@", visibleLabel))
             .firstMatch
     }

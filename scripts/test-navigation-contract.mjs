@@ -91,6 +91,9 @@ assert.doesNotMatch(
 )
 assert.match(stemistApp, /\.onOpenURL\s*\{\s*url\s+in[\s\S]{0,180}?routeCoordinator\.receive\(url\)/, 'the app lifecycle boundary must capture incoming URLs durably')
 assert.match(stemistApp, /configurationForConnecting[\s\S]{0,500}?connectionOptions\.urlContexts[\s\S]{0,320}?routeCoordinator\.receive\(context\.url\)/, 'cold-launch scene connection must capture URL contexts before the root mounts')
+assert.match(stemistApp, /configuration\.delegateClass\s*=\s*StemistSceneDelegate\.self/, 'cold-launch URL delivery must use an explicit scene delegate')
+assert.match(stemistApp, /final\s+class\s+StemistSceneDelegate[\s\S]{0,1400}?willConnectTo[\s\S]{0,500}?receive\(connectionOptions\.urlContexts\)/, 'the scene delegate must retain URL contexts during cold launch')
+assert.match(stemistApp, /func\s+scene\(_\s+scene:\s*UIScene,\s*openURLContexts\s+URLContexts:\s*Set<UIOpenURLContext>\)/, 'the scene delegate must receive URLs delivered after scene connection')
 assert.doesNotMatch(stemistApp, /routeCoordinator:\s*AppRouteCoordinator\?/, 'scene URL capture must not depend on a nil coordinator delegate')
 assert.match(stemistApp, /func\s+peekPendingURL\(\)\s*->\s*URL\?/, 'route coordinator must expose a non-destructive pending URL read')
 assert.match(stemistApp, /func\s+acknowledgePendingURL\(_\s+url:\s*URL\)/, 'route coordinator must acknowledge only the URL that was presented')
@@ -116,18 +119,13 @@ assert.match(
 )
 assert.match(
   contentView,
-  /\.task\(id:\s*routeCoordinator\.pendingURL\)[\s\S]{0,320}?(?:consumePendingExternalURL|schedulePendingExternalURLConsumption)\(\)/,
+  /\.task\(id:\s*pendingExternalURLTaskID\)[\s\S]{0,1600}?consumePendingExternalURL\(\)/,
   'cold-launch route consumption must react to the retained URL after the root is mounted'
 )
 assert.match(
   contentView,
-  /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?rootIsReady\s*=\s*true[\s\S]{0,500}?schedulePendingExternalURLConsumption\(\)/,
+  /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?rootIsReady\s*=\s*true/,
   'cold-launch URL contexts received before SwiftUI observation must be consumed again when the root appears'
-)
-assert.match(
-  contentView,
-  /func\s+schedulePendingExternalURLConsumption\(\)[\s\S]{0,1400}?await\s+Task\.yield\(\)[\s\S]{0,500}?Task\.sleep[\s\S]{0,500}?consumePendingExternalURL\(\)/,
-  'cold-launch presentation must wait for the root presenter to mount'
 )
 assert.doesNotMatch(
   contentView,
@@ -136,8 +134,8 @@ assert.doesNotMatch(
 )
 assert.equal(
   (contentView.match(/\.fullScreenCover\(/g) ?? []).length,
-  1,
-  'learning routes must use one root-level full-screen presenter'
+  0,
+  'learning routes must not depend on SwiftUI full-screen presenter transitions'
 )
 assert.doesNotMatch(
   contentView,
@@ -156,75 +154,40 @@ assert.match(
 )
 assert.match(
   contentView,
-  /@Published\s+private\(set\)\s+var\s+isPresented\s*=\s*false/,
-  'the coordinator must expose a dedicated native presenter state'
+  /@Published\s+private\(set\)\s+var\s+activePresentationID:\s*UUID\?/,
+  'the coordinator must expose a presentation identity for stale dismissal protection'
 )
+// Root-level presentation is driven directly by activeLaunch.
+assert.doesNotMatch(contentView, /private\s+var\s+pendingLaunch|private\s+var\s+isDismissing|private\s+var\s+dismissalFallbackTask/, 'route presentation must not depend on modal transition state')
 assert.match(
   contentView,
-  /private\s+var\s+pendingLaunch:\s*WebRouteLaunch\?/,
-  'route requests during dismissal must have one pending slot'
-)
-assert.match(
-  contentView,
-  /private\s+var\s+isDismissing\s*=\s*false/,
-  'the coordinator must track the system presenter handoff explicitly'
-)
-assert.match(
-  contentView,
-  /private\s+var\s+dismissalFallbackTask:\s*Task<Void,\s*Never>\?/,
-  'the coordinator must retain a bounded fallback when iPadOS omits onDismiss'
-)
-assert.match(
-  contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,700}?isDismissing\s*\|\|\s*!isPresented[\s\S]{0,900}?pendingLaunch\s*=\s*launch/,
-  'a route requested during dismissal must be buffered'
-)
-assert.match(
-  contentView,
-  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,650}?if\s+activeLaunch\s*!=\s*nil\s*\{[\s\S]{0,420}?activeLaunch\s*=\s*launch/,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,500}?activeLaunch\s*=\s*launch/,
   'the workspace must replace resident content in place and present fresh routes'
 )
 assert.match(
   contentView,
-  /func\s+dismiss\(\)[\s\S]{0,520}?isDismissing\s*=\s*true[\s\S]{0,520}?isPresented\s*=\s*false/,
-  'the workspace must explicitly request dismissal through its state machine'
+  /func\s+dismiss\(\)[\s\S]{0,260}?activeLaunch\s*=\s*nil/,
+  'the explicit close action must remove the active workspace without modal feedback'
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,1400}?isPresented\s*=\s*false[\s\S]{0,500}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,600}?activeLaunch\s*=\s*replay[\s\S]{0,160}?isPresented\s*=\s*true/,
-  'the settled dismissal callback must replay the latest buffered route after the presenter settles'
+  /func\s+completeDismissal\(for\s+presentationID:\s*UUID\?\)[\s\S]{0,300}?activePresentationID\s*==\s*presentationID/,
+  'late workspace disappearance callbacks must be scoped to their original presentation'
 )
+assert.doesNotMatch(contentView, /scheduleDismissalFallback|setPresented/, 'the workspace must not expose unscoped modal callback plumbing')
+assert.doesNotMatch(contentView, /@State\s+private\s+var\s+isWorkspacePresented/, 'the root presenter must not maintain a second presentation state')
+assert.doesNotMatch(contentView, /workspacePresentation|fullScreenCover/, 'the root must not depend on modal presenter callbacks')
 assert.match(
   contentView,
-  /private\s+func\s+scheduleDismissalFallback\(\)[\s\S]{0,700}?self\.completeDismissal\(\)/,
-  'a missing dismissal callback must still release buffered routes'
+  /ZStack\s*\{/,
+  'the workspace must be a root-level immersive overlay'
 )
-assert.match(
-  contentView,
-  /func\s+setPresented\(_\s+presented:\s*Bool\)[\s\S]{0,520}?binding\s+is\s+feedback\s+only[\s\S]{0,700}?explicit\s+close\s+action\s+owns\s+dismissal/,
-  'the native binding must not apply stale transition feedback to the coordinator'
-)
-assert.doesNotMatch(
-  contentView,
-  /@State\s+private\s+var\s+isWorkspacePresented/,
-  'the root presenter must not maintain a second presentation state'
-)
-assert.match(
-  contentView,
-  /\.fullScreenCover\([\s\S]{0,260}?isPresented:\s*workspacePresentation[\s\S]{0,320}?onDismiss:\s*\{\s*webWorkspace\.completeDismissal\(\)\s*\}[\s\S]{0,420}?WebWorkspaceHost\([\s\S]{0,360}?workspace:\s*webWorkspace/,
-  'the root must use one native boolean presenter and render the resident workspace route'
-)
-assert.match(
-  contentView,
-  /private\s+var\s+workspacePresentation:\s*Binding<Bool>[\s\S]{0,500}?get:\s*\{\s*webWorkspace\.isPresented\s*\}[\s\S]{0,260}?set:\s*\{\s*value\s+in\s+webWorkspace\.setPresented\(value\)\s*\}/,
-  'the coordinator must directly own the single native boolean presenter binding'
-)
-assert.match(
-  contentView,
-  /WebWorkspaceHost\([\s\S]{0,500}?\.interactiveDismissDisabled\(\)/,
-  'the web workspace must use its explicit close control instead of an untracked interactive dismissal'
-)
-assert.doesNotMatch(contentView, /retainedWebLaunch|pendingWebLaunch|isWebWorkspaceClosing/, 'the old resident overlay state must be removed')
+assert.match(contentView, /if\s+let\s+launch\s*=\s*webWorkspace\.activeLaunch/, 'the overlay must render the active route')
+assert.match(contentView, /WebWorkspaceHost\(\s*launch:\s*launch/, 'the overlay host must receive the typed launch')
+assert.match(contentView, /allowsHitTesting\(webWorkspace\.activeLaunch\s*==\s*nil\)/, 'background tabs must not receive taps while a workspace is open')
+assert.match(contentView, /accessibilityHidden\(webWorkspace\.activeLaunch\s*!=\s*nil\)/, 'VoiceOver must stay inside the active workspace')
+assert.match(contentView, /\.zIndex\(10\)/, 'the workspace overlay must stay above the tab shell')
+assert.match(contentView, /tab-today[\s\S]{0,1200}?tab-ielts[\s\S]{0,1200}?tab-stem[\s\S]{0,1200}?tab-notebook[\s\S]{0,1200}?tab-profile/, 'each tab needs a stable accessibility identifier')
 assert.doesNotMatch(
   contentView,
   /queuedWebLaunches|presentNextQueuedWebLaunch/,
@@ -248,6 +211,9 @@ assert.doesNotMatch(
 )
 assert.match(webModule, /let\s+requestLaunch:\s*\(WebRouteLaunch\)\s*->\s*Void/, 'the web module must expose an in-process route request to its parent')
 assert.match(webModule, /allowsAccountEntry[\s\S]{0,900}?requestLaunch\(WebRouteLaunch\(route:\s*\.ieltsAccount\)\)[\s\S]{0,900}?accessibilityIdentifier\("web-open-account"\)/, 'the QA-only account control must request an in-process account route')
+assert.match(webModule, /private\s+var\s+workspaceHeader:\s*some\s+View/, 'the workspace must expose a stable native header outside NavigationStack toolbar timing')
+assert.match(webModule, /workspaceHeader[\s\S]{0,1200}?accessibilityIdentifier\("web-close"\)/, 'the stable workspace header must own the close control')
+assert.doesNotMatch(webModule, /\.toolbar\b/, 'workspace actions must not depend on a delayed NavigationStack toolbar')
 assert.match(
   contentView,
   /let\s+openRoute:\s*\(WebRoute\)\s*->\s*Void/,
@@ -367,7 +333,8 @@ assert.match(
   /normalizedQueryID[\s\S]*?structuralID[\s\S]*?!=\s*structuralID/,
   'custom-scheme deep links must reject conflicting path, host and query route IDs'
 )
-assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebWorkspaceHost\(/, 'learning workspaces must open as one immersive root-level flow')
+assert.match(contentView, /ZStack\s*\{/, 'learning workspaces must open as one immersive root-level flow')
+assert.match(contentView, /if\s+let\s+launch\s*=\s*webWorkspace\.activeLaunch[\s\S]{0,500}?WebWorkspaceHost\(/, 'the immersive flow must render a typed workspace host')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,
@@ -526,6 +493,7 @@ assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAn
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
+assert.match(shellUITests, /testWorkspaceRouteReplacementIgnoresLateDismissalFeedback/, 'the shell suite must cover stale workspace dismissal feedback')
 assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?app\.open\(accountURL\)/, 'the student account boundary must also survive a cold-launch deep link')
 assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
@@ -873,6 +841,7 @@ assert.match(
 )
 
 const studentShellTests = [
+  'testWorkspaceRouteReplacementIgnoresLateDismissalFeedback',
   'testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks',
   'testStudentBuildCanOpenAndCloseEveryIELTSRoute',
   'testStudentBuildCanOpenAndCloseEverySTEMRoute',

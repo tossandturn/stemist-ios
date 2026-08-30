@@ -15,33 +15,19 @@ enum AppTab: Hashable {
 @MainActor
 final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
-    /// Keep the native presenter alive until its dismissal callback settles.
-    /// The resident route is retained while the cover animates away, so a
-    /// binding transaction cannot tear down the WebView prematurely.
-    @Published private(set) var isPresented = false
+    @Published private(set) var activePresentationID: UUID?
     #if DEBUG
     @Published private(set) var debugSnapshot = "0 init"
     private var debugSequence = 0
     private let debugLog = Logger(subsystem: "com.ieltsist.stemist", category: "workspace")
     #endif
-    private var pendingLaunch: WebRouteLaunch?
-    private var isDismissing = false
-    private var dismissalFallbackTask: Task<Void, Never>?
 
-    private enum Timing {
-        // `onDismiss` is the normal settled boundary. The fallback only
-        // handles a system callback that is lost during an interrupted scene
-        // transition; it never drives the normal route path.
-        static let dismissalFallbackNanoseconds: UInt64 = 700_000_000
-        static let replayDelayNanoseconds: UInt64 = 50_000_000
-    }
 
     #if DEBUG
     private func record(_ event: String) {
         debugSequence += 1
         let active = activeLaunch?.route.id ?? "nil"
-        let pending = pendingLaunch?.route.id ?? "nil"
-        debugSnapshot = "\(debugSequence) \(event) active=\(active) pending=\(pending) presented=\(isPresented) dismissing=\(isDismissing)"
+        debugSnapshot = "\(debugSequence) \(event) active=\(active)"
         debugLog.debug("\(self.debugSnapshot, privacy: .public)")
         print("[StemistWorkspace] \(debugSnapshot)")
     }
@@ -51,138 +37,66 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
     func present(_ launch: WebRouteLaunch) {
         record("present(\(launch.route.id))")
-        if isDismissing || !isPresented {
-            // During dismissal the resident route is intentionally retained.
-            // Buffer the latest request and replay it after the settled
-            // callback instead of asking SwiftUI to re-present mid-transition.
-            if activeLaunch != nil {
-                pendingLaunch = launch
-                scheduleDismissalFallback()
-                record("buffered(\(launch.route.id))")
-                return
-            }
-
-            pendingLaunch = nil
-            activeLaunch = launch
-            isPresented = true
-            record("presented(\(launch.route.id))")
-            return
-        }
-
-        if activeLaunch != nil {
-            // Keep one full-screen presenter alive and replace only its
-            // resident content. This avoids a SwiftUI/UIKit teardown race
-            // when a module requests another module (for example account).
-            guard activeLaunch?.id != launch.id else { return }
-            activeLaunch = launch
-            record("replaced(\(launch.route.id))")
-            return
-        }
-
-        pendingLaunch = nil
+        guard activeLaunch?.id != launch.id else { return }
+        activePresentationID = UUID()
         activeLaunch = launch
-        isPresented = true
         record("presented(\(launch.route.id))")
     }
 
-    func dismiss() {
+    @discardableResult
+    func dismiss() -> UUID? {
         record("dismiss()")
-        guard activeLaunch != nil, isPresented, !isDismissing else { return }
-        isDismissing = true
-        // Keep the resident WebView until fullScreenCover's onDismiss. This
-        // makes toolbar dismissal and system swipe dismissal equivalent.
-        isPresented = false
-        record("dismiss-requested")
-        scheduleDismissalFallback()
-    }
-
-    func setPresented(_ presented: Bool) {
-        record("setPresented(\(presented))")
-        // This binding is feedback only. SwiftUI writes the value it observes
-        // while a cover is transitioning; applying that write back to the
-        // coordinator can dismiss a newly requested route when an old false
-        // arrives late. The explicit close action owns dismissal, and
-        // `onDismiss` (plus its bounded fallback) owns completion.
-    }
-
-    func completeDismissal() {
-        record("completeDismissal()")
-        dismissalFallbackTask?.cancel()
-        dismissalFallbackTask = nil
-
-        // `onDismiss` is authoritative even when SwiftUI invokes it before
-        // the binding setter. Clearing both values is idempotent and leaves
-        // no stale resident route behind.
-        isDismissing = false
-        isPresented = false
+        guard activeLaunch != nil, let presentationID = activePresentationID else {
+            return nil
+        }
         activeLaunch = nil
+        activePresentationID = nil
         record("dismissed")
-
-        guard let pendingLaunch else { return }
-        self.pendingLaunch = nil
-        let replay = pendingLaunch
-        Task { @MainActor [weak self] in
-            // Run after the dismissal transaction has left the presenter.
-            try? await Task.sleep(nanoseconds: Timing.replayDelayNanoseconds)
-            guard let self, !self.isDismissing, !self.isPresented,
-                  self.activeLaunch == nil else { return }
-            self.activeLaunch = replay
-            self.isPresented = true
-            self.record("replayed(\(replay.route.id))")
-        }
+        return presentationID
     }
 
-    private func scheduleDismissalFallback() {
-        dismissalFallbackTask?.cancel()
-        dismissalFallbackTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: Timing.dismissalFallbackNanoseconds)
-            } catch {
-                return
-            }
-            guard let self, self.isDismissing else { return }
-            self.completeDismissal()
+    /// Completes a dismissal only for the presentation that requested it.
+    ///
+    /// SwiftUI/UIKit can deliver a delayed disappearance callback for an old
+    /// workspace after a new route has already replaced it. The identity
+    /// check makes that callback harmless instead of clearing the new route.
+    func completeDismissal(for presentationID: UUID?) {
+        guard let presentationID, activePresentationID == presentationID else {
+            record("ignored-late-dismissal")
+            return
         }
+        activeLaunch = nil
+        activePresentationID = nil
+        record("completed-dismissal")
     }
 
     func hasPresented(_ launch: WebRouteLaunch) -> Bool {
-        activeLaunch?.id == launch.id && isPresented
+        activeLaunch?.id == launch.id
     }
 }
 
 @MainActor
 private struct WebWorkspaceHost: View {
-    @ObservedObject var workspace: WebWorkspaceCoordinator
+    let launch: WebRouteLaunch
+    let presentationID: UUID
     let configuration: AppRuntimeConfiguration
     let requestLaunch: (WebRouteLaunch) -> Void
     let dismissWorkspace: () -> Void
     let onMount: (WebRouteLaunch) -> Void
+    let onDisappear: (UUID) -> Void
 
     var body: some View {
-        Group {
-            if let launch = workspace.activeLaunch {
-                WebModuleView(
-                    launch: launch,
-                    requestLaunch: requestLaunch,
-                    dismissWorkspace: dismissWorkspace
-                )
-                .id(launch.id)
-                .onAppear { onMount(launch) }
-            } else {
-                Color.clear
-            }
-        }
+        WebModuleView(
+            launch: launch,
+            requestLaunch: requestLaunch,
+            dismissWorkspace: dismissWorkspace
+        )
+        .id(launch.id)
+        .onAppear { onMount(launch) }
+        .onDisappear { onDisappear(presentationID) }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
     }
 }
-
-#if DEBUG
-private extension WebWorkspaceCoordinator {
-    func recordHostEvent(_ event: String) {
-        record(event)
-    }
-}
-#endif
 
 @MainActor
 struct ContentView: View {
@@ -214,13 +128,6 @@ struct ContentView: View {
         webWorkspace.present(launch)
     }
 
-    private var workspacePresentation: Binding<Bool> {
-        Binding(
-            get: { webWorkspace.isPresented },
-            set: { value in webWorkspace.setPresented(value) }
-        )
-    }
-
     private func consumePendingExternalURL() {
         guard rootIsReady else { return }
         guard let url = routeCoordinator.peekPendingURL() else { return }
@@ -246,107 +153,109 @@ struct ContentView: View {
         routeCoordinator.acknowledgePendingURL(url)
     }
 
-    private func schedulePendingExternalURLConsumption() {
-        guard rootIsReady, routeCoordinator.pendingURL != nil else { return }
-
-        Task { @MainActor in
-            // The root view's onAppear can precede installation of the
-            // full-screen presenter by one or more run-loop turns on cold
-            // launch. Waiting briefly here keeps the URL retained until the
-            // presenter is actually able to accept it.
-            await Task.yield()
-            do {
-                try await Task.sleep(nanoseconds: 250_000_000)
-            } catch {
-                return
-            }
-            consumePendingExternalURL()
-        }
+    private var pendingExternalURLTaskID: String {
+        "\(rootIsReady ? "ready" : "waiting")|\(routeCoordinator.pendingURL?.absoluteString ?? "none")"
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            DashboardView(selectedTab: $selectedTab, openRoute: present)
-                .tabItem { Label("Today", systemImage: "house") }
-                .tag(AppTab.today)
-                .accessibilityIdentifier("tab-today")
+        ZStack {
+            TabView(selection: $selectedTab) {
+                DashboardView(selectedTab: $selectedTab, openRoute: present)
+                    .tabItem { Label("Today", systemImage: "house").accessibilityIdentifier("tab-today") }
+                    .tag(AppTab.today)
+                    .accessibilityIdentifier("tab-today-content")
 
-            ModuleHomeView(
-                title: "IELTS",
-                subtitle: "Choose a skill and continue in the same IELTSist account.",
-                routes: [
-                    .ieltsListening,
-                    .ieltsReading,
-                    .ieltsWriting,
-                    .ieltsSpeaking,
-                    .ieltsVocabulary,
-                ],
-                openRoute: present
-            )
-            .tabItem { Label("IELTS", systemImage: "text.book.closed") }
-            .tag(AppTab.ielts)
-            .accessibilityIdentifier("tab-ielts")
+                ModuleHomeView(
+                    title: "IELTS",
+                    subtitle: "Choose a skill and continue in the same IELTSist account.",
+                    routes: [
+                        .ieltsListening,
+                        .ieltsReading,
+                        .ieltsWriting,
+                        .ieltsSpeaking,
+                        .ieltsVocabulary,
+                    ],
+                    openRoute: present
+                )
+                .tabItem { Label("IELTS", systemImage: "text.book.closed").accessibilityIdentifier("tab-ielts") }
+                .tag(AppTab.ielts)
+                .accessibilityIdentifier("tab-ielts-content")
 
-            ModuleHomeView(
-                title: "STEM",
-                subtitle: "Open a separate IG, AS, A2 or exam practice route.",
-                routes: [
-                    .stemIG,
-                    .stemAS,
-                    .stemA2,
-                    .stemTopics,
-                    .stemPastPapers,
-                    .stemNotebook,
-                    .stemCoach,
-                ],
-                openRoute: present
-            )
-            .tabItem { Label("STEM", systemImage: "atom") }
-            .tag(AppTab.stem)
-            .accessibilityIdentifier("tab-stem")
+                ModuleHomeView(
+                    title: "STEM",
+                    subtitle: "Open a separate IG, AS, A2 or exam practice route.",
+                    routes: [
+                        .stemIG,
+                        .stemAS,
+                        .stemA2,
+                        .stemTopics,
+                        .stemPastPapers,
+                        .stemNotebook,
+                        .stemCoach,
+                    ],
+                    openRoute: present
+                )
+                .tabItem { Label("STEM", systemImage: "atom").accessibilityIdentifier("tab-stem") }
+                .tag(AppTab.stem)
+                .accessibilityIdentifier("tab-stem-content")
 
-            NotebookView(openRoute: present)
-                .tabItem { Label("Notebook", systemImage: "square.and.pencil") }
-                .tag(AppTab.notebook)
-                .accessibilityIdentifier("tab-notebook")
+                NotebookView(openRoute: present)
+                    .tabItem { Label("Notebook", systemImage: "square.and.pencil").accessibilityIdentifier("tab-notebook") }
+                    .tag(AppTab.notebook)
+                    .accessibilityIdentifier("tab-notebook-content")
 
-            if configuration.showsAccountEntry {
-                ProfileView(openRoute: present)
-                    .tabItem { Label("Profile", systemImage: "person") }
-                    .tag(AppTab.profile)
-                    .accessibilityIdentifier("tab-profile")
+                if configuration.showsAccountEntry {
+                    ProfileView(openRoute: present)
+                        .tabItem { Label("Profile", systemImage: "person").accessibilityIdentifier("tab-profile") }
+                        .tag(AppTab.profile)
+                        .accessibilityIdentifier("tab-profile-content")
+                }
+            }
+            .allowsHitTesting(webWorkspace.activeLaunch == nil)
+            .accessibilityHidden(webWorkspace.activeLaunch != nil)
+
+            if let launch = webWorkspace.activeLaunch,
+               let presentationID = webWorkspace.activePresentationID {
+                WebWorkspaceHost(
+                    launch: launch,
+                    presentationID: presentationID,
+                    configuration: configuration,
+                    requestLaunch: present,
+                    dismissWorkspace: { _ = webWorkspace.dismiss() },
+                    onMount: acknowledgeMountedLaunch,
+                    onDisappear: { presentationID in
+                        webWorkspace.completeDismissal(for: presentationID)
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(StemistTheme.background)
+                .ignoresSafeArea()
+                .zIndex(10)
+                .accessibilityAddTraits(.isModal)
             }
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
-        .fullScreenCover(
-            isPresented: workspacePresentation,
-            onDismiss: { webWorkspace.completeDismissal() }
-        ) {
-            WebWorkspaceHost(
-                workspace: webWorkspace,
-                configuration: configuration,
-                requestLaunch: present,
-                dismissWorkspace: webWorkspace.dismiss,
-                onMount: acknowledgeMountedLaunch
-            )
-            .interactiveDismissDisabled()
-        }
         .onAppear {
             normalizeSelectedTab()
             rootIsReady = true
-            schedulePendingExternalURLConsumption()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
-        .onChange(of: webWorkspace.activeLaunch?.id) { _, _ in
-            // A deep link can arrive while the previous module is closing.
-            // Re-check it when the coordinator replays the buffered route.
-            schedulePendingExternalURLConsumption()
-        }
-        .task(id: routeCoordinator.pendingURL) {
-            schedulePendingExternalURLConsumption()
+        .task(id: pendingExternalURLTaskID) {
+            guard rootIsReady, routeCoordinator.pendingURL != nil else { return }
+            await Task.yield()
+            for _ in 0..<20 {
+                guard !Task.isCancelled else { return }
+                consumePendingExternalURL()
+                guard routeCoordinator.pendingURL != nil else { return }
+                do {
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                } catch {
+                    return
+                }
+            }
         }
 #if DEBUG
         .accessibilityValue(webWorkspace.debugSnapshot)
