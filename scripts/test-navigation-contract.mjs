@@ -171,6 +171,11 @@ assert.match(
 )
 assert.match(
   contentView,
+  /private\s+var\s+dismissalFallbackTask:\s*Task<Void,\s*Never>\?/,
+  'the coordinator must retain a bounded fallback when iPadOS omits onDismiss'
+)
+assert.match(
+  contentView,
   /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,220}?if\s+isDismissing\s*\{[\s\S]{0,120}?pendingLaunch\s*=\s*launch/,
   'a route requested during dismissal must be buffered'
 )
@@ -188,6 +193,11 @@ assert.match(
   contentView,
   /func\s+completeDismissal\(\)[\s\S]{0,1400}?activeLaunch\s*=\s*nil[\s\S]{0,650}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,500}?activeLaunch\s*=\s*replay/,
   'the settled dismissal callback must replay the latest buffered route after the presenter settles'
+)
+assert.match(
+  contentView,
+  /private\s+func\s+scheduleDismissalFallback\(\)[\s\S]{0,700}?self\.completeDismissal\(\)/,
+  'a missing dismissal callback must still release buffered routes'
 )
 assert.match(
   contentView,

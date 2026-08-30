@@ -26,6 +26,15 @@ final class WebWorkspaceCoordinator: ObservableObject {
     #endif
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
+    private var dismissalFallbackTask: Task<Void, Never>?
+
+    private enum Timing {
+        // `onDismiss` is normally the settled boundary, but iPadOS can miss
+        // that callback when a cover is removed by a binding write. Keep a
+        // bounded fallback so a buffered route can never remain stuck.
+        static let dismissalFallbackNanoseconds: UInt64 = 700_000_000
+        static let replayDelayNanoseconds: UInt64 = 50_000_000
+    }
 
     #if DEBUG
     private func record(_ event: String) {
@@ -71,6 +80,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
         // `onDismiss` is the settled boundary for replaying a pending route.
         activeLaunch = nil
         record("dismiss-requested")
+        scheduleDismissalFallback()
     }
 
     func setActiveLaunch(_ launch: WebRouteLaunch?) {
@@ -86,11 +96,12 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
     func completeDismissal() {
         record("completeDismissal()")
-        guard isDismissing || activeLaunch == nil else { return }
-
-        // `onDismiss` is the presentation system's settled boundary. Do not
-        // replay a pending route until this callback, rather than guessing a
-        // transition duration with a timer.
+        // Treat onDismiss as authoritative even if SwiftUI invokes it before
+        // the item binding writes nil. The previous guard could return in that
+        // ordering and leave `isDismissing` true forever, so every later route
+        // was buffered without a callback left to replay it.
+        dismissalFallbackTask?.cancel()
+        dismissalFallbackTask = nil
         isDismissing = false
         activeLaunch = nil
         record("dismissed")
@@ -99,12 +110,26 @@ final class WebWorkspaceCoordinator: ObservableObject {
         self.pendingLaunch = nil
         let replay = pendingLaunch
         Task { @MainActor [weak self] in
-            // Give SwiftUI one settled run-loop turn after onDismiss before
-            // asking the same presenter to mount its next resident module.
-            await Task.yield()
+            // Keep the replay outside the dismissal transaction. A short
+            // bounded delay is enough for UIKit's transition container to be
+            // removed while keeping route changes responsive.
+            try? await Task.sleep(nanoseconds: Timing.replayDelayNanoseconds)
             guard let self, !self.isDismissing, self.activeLaunch == nil else { return }
             self.activeLaunch = replay
             self.record("replayed(\(replay.route.id))")
+        }
+    }
+
+    private func scheduleDismissalFallback() {
+        dismissalFallbackTask?.cancel()
+        dismissalFallbackTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Timing.dismissalFallbackNanoseconds)
+            } catch {
+                return
+            }
+            guard let self, self.isDismissing else { return }
+            self.completeDismissal()
         }
     }
 
