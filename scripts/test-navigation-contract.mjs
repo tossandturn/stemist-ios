@@ -273,6 +273,10 @@ assert.match(webModule, /injectionTime:\s*\.atDocumentStart/, 'account controls 
 assert.match(webModule, /forMainFrameOnly:\s*true/, 'account-hiding JavaScript must stay scoped to the product document')
 assert.match(webModule, /#sidebarAccountEntry/, 'the account visibility script must target the production account button')
 assert.match(webModule, /sidebar-account-entry/, 'the account visibility script must target the production account entry')
+assert.ok(
+  webModule.includes("replace(/\\\\s+/g, ' ')"),
+  'JavaScript regular-expression escapes must remain escaped inside the Swift multiline string'
+)
 assert.match(webModule, /data-view=\\?"mine/, 'the account visibility script must cover SPA account navigation')
 assert.match(webModule, /data-home-action=\\?"mine/, 'the account visibility script must cover dashboard account actions')
 assert.match(webModule, /account-trigger/, 'the account visibility script must target the STEM header account entry')

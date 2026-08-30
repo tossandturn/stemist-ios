@@ -133,7 +133,7 @@ private enum AccountEntryVisibilityScript {
             }
 
             candidates.forEach((element) => {
-                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                const text = (element.textContent || '').replace(/\\s+/g, ' ').trim();
                 if (text === 'Log in or create account'
                     && !element.hasAttribute('data-stemist-hidden-account-entry')) {
                     element.setAttribute('data-stemist-hidden-account-entry', 'true');
