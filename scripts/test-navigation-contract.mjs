@@ -107,22 +107,22 @@ assert.match(
 )
 assert.match(
   contentView,
-  /\.task\(id:\s*routeCoordinator\.pendingURL\)[\s\S]{0,260}?consumePendingExternalURL\(\)/,
+  /\.task\(id:\s*routeCoordinator\.pendingURL\)[\s\S]{0,320}?(?:consumePendingExternalURL|schedulePendingExternalURLConsumption)\(\)/,
   'cold-launch route consumption must react to the retained URL after the root is mounted'
 )
 assert.match(
   contentView,
-  /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?consumePendingExternalURL\(\)/,
+  /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?rootIsReady\s*=\s*true[\s\S]{0,500}?schedulePendingExternalURLConsumption\(\)/,
   'cold-launch URL contexts received before SwiftUI observation must be consumed again when the root appears'
 )
 assert.match(
   contentView,
-  /\.onAppear\s*\{[\s\S]{0,500}?Task\s*\{\s*@MainActor[\s\S]{0,260}?await\s+Task\.yield\(\)[\s\S]{0,180}?consumePendingExternalURL\(\)/,
-  'cold-launch presentation must wait one main-actor turn for the root presenter to mount'
+  /func\s+schedulePendingExternalURLConsumption\(\)[\s\S]{0,1400}?await\s+Task\.yield\(\)[\s\S]{0,500}?Task\.sleep[\s\S]{0,500}?consumePendingExternalURL\(\)/,
+  'cold-launch presentation must wait for the root presenter to mount'
 )
 assert.doesNotMatch(
   contentView,
-  /scenePhase|schedulePendingExternalURLConsumption/,
+  /scenePhase/,
   'retained deep links must not depend on a lossy scene-phase event ordering'
 )
 assert.equal(

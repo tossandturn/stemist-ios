@@ -10,6 +10,13 @@ enum AppTab: Hashable {
 
 @MainActor
 final class WebWorkspaceCoordinator: ObservableObject {
+    private enum Timing {
+        // A full-screen cover can remain in UIKit's transition container for
+        // a short period after its binding is cleared. Keep replacement routes
+        // buffered until that container has settled.
+        static let dismissalSettleNanoseconds: UInt64 = 400_000_000
+    }
+
     @Published private(set) var activeLaunch: WebRouteLaunch?
     private var pendingLaunch: WebRouteLaunch?
     private var isDismissing = false
@@ -53,9 +60,15 @@ final class WebWorkspaceCoordinator: ObservableObject {
     private func scheduleDismissalCompletion() {
         let token = UUID()
         dismissalToken = token
-        // Let SwiftUI finish removing the old full-screen cover before replaying a route.
+        // Let SwiftUI and UIKit finish removing the old full-screen cover
+        // before replaying a route. The token makes duplicate setter/onDismiss
+        // callbacks harmless while still allowing the latest route to win.
         Task { @MainActor [weak self] in
-            await Task.yield()
+            do {
+                try await Task.sleep(nanoseconds: Timing.dismissalSettleNanoseconds)
+            } catch {
+                return
+            }
             guard let self, self.dismissalToken == token, self.activeLaunch == nil else { return }
             self.isDismissing = false
             guard let pendingLaunch = self.pendingLaunch else { return }
@@ -70,6 +83,7 @@ struct ContentView: View {
     let configuration: AppRuntimeConfiguration
     @ObservedObject private var routeCoordinator: AppRouteCoordinator
     @State private var selectedTab: AppTab = .today
+    @State private var rootIsReady = false
     @StateObject private var webWorkspace = WebWorkspaceCoordinator()
 
     init(
@@ -102,6 +116,7 @@ struct ContentView: View {
     }
 
     private func consumePendingExternalURL() {
+        guard rootIsReady else { return }
         guard let url = routeCoordinator.peekPendingURL() else { return }
         guard let launch = WebRouteLaunch(
             url: url,
@@ -112,6 +127,24 @@ struct ContentView: View {
         }
         present(launch)
         routeCoordinator.acknowledgePendingURL(url)
+    }
+
+    private func schedulePendingExternalURLConsumption() {
+        guard rootIsReady, routeCoordinator.pendingURL != nil else { return }
+
+        Task { @MainActor in
+            // The root view's onAppear can precede installation of the
+            // full-screen presenter by one or more run-loop turns on cold
+            // launch. Waiting briefly here keeps the URL retained until the
+            // presenter is actually able to accept it.
+            await Task.yield()
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000)
+            } catch {
+                return
+            }
+            consumePendingExternalURL()
+        }
     }
 
     var body: some View {
@@ -182,19 +215,14 @@ struct ContentView: View {
         }
         .onAppear {
             normalizeSelectedTab()
-            Task { @MainActor in
-                // Give the root presenter one run-loop turn before presenting a
-                // URL captured during scene connection or cold launch.
-                await Task.yield()
-                consumePendingExternalURL()
-            }
+            rootIsReady = true
+            schedulePendingExternalURLConsumption()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
         .task(id: routeCoordinator.pendingURL) {
-            await Task.yield()
-            consumePendingExternalURL()
+            schedulePendingExternalURLConsumption()
         }
         .accessibilityIdentifier("stemist-root")
     }
