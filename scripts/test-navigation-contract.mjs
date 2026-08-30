@@ -371,6 +371,11 @@ assert.match(contentView, /\.fullScreenCover\([\s\S]{0,500}?WebWorkspaceHost\(/,
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
 assert.match(
   contentView,
+  /ForEach\(routes\)[\s\S]{0,1800}?\.frame\(maxWidth:\s*\.infinity,\s*minHeight:\s*52,\s*alignment:\s*\.leading\)[\s\S]{0,160}?\.contentShape\(Rectangle\(\)\)[\s\S]{0,320}?\.buttonStyle\(\.plain\)/,
+  'route rows must expose the same full-width hit target that accessibility reports'
+)
+assert.match(
+  contentView,
   /Button\s*\{\s*openRoute\(\.stemNotebook\)[\s\S]{0,800}?\.accessibilityIdentifier\("open-stem-notebook"\)/,
   'the Notebook entry needs a stable native test identifier'
 )
