@@ -23,6 +23,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
             return
         }
 
+        pendingLaunch = nil
         activeLaunch = launch
     }
 
@@ -34,6 +35,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     }
 
     func completeDismissal() {
+        guard activeLaunch == nil else { return }
         isDismissing = false
         guard pendingLaunch != nil else { return }
 

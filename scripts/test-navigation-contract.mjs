@@ -149,7 +149,12 @@ assert.match(
 )
 assert.match(
   contentView,
-  /func\s+completeDismissal\(\)[\s\S]{0,700}?pendingLaunch[\s\S]{0,700}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
+  /func\s+present\(_\s+launch:\s*WebRouteLaunch\)[\s\S]{0,900}?pendingLaunch\s*=\s*nil[\s\S]{0,180}?activeLaunch\s*=\s*launch/,
+  'a fresh route after dismissal must consume any stale pending route before presenting'
+)
+assert.match(
+  contentView,
+  /func\s+completeDismissal\(\)[\s\S]{0,700}?guard\s+activeLaunch\s*==\s*nil[\s\S]{0,700}?pendingLaunch[\s\S]{0,700}?self\.pendingLaunch\s*=\s*nil[\s\S]{0,180}?self\.activeLaunch\s*=\s*pendingLaunch/,
   'the full-screen dismissal callback must replay and then consume the buffered route'
 )
 assert.match(
