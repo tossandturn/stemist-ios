@@ -202,7 +202,13 @@ final class StemistShellUITests: XCTestCase {
         routeButton.tap()
 
         let module = app.otherElements[moduleIdentifier]
-        XCTAssertTrue(module.waitForExistence(timeout: 3), "Expected \(buttonIdentifier) to open \(moduleIdentifier)")
+        guard module.waitForExistence(timeout: 3) else {
+            XCTFail(
+                "Expected \(buttonIdentifier) to open \(moduleIdentifier)."
+                    + "\n\nAccessibility hierarchy after opening the route:\n\(app.debugDescription)"
+            )
+            return
+        }
         attachScreenshot(named: "\(moduleIdentifier)-opened")
         closeWebModule(module, named: moduleIdentifier)
     }
