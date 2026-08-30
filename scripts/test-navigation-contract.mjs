@@ -257,10 +257,37 @@ assert.doesNotMatch(packageSwift, /path:\s*"\.\.\/Tests\/StemistShellUITests"/, 
 assert.ok(fs.existsSync(shellUITestPath), 'the native shell UI suite must exist')
 const shellUITests = fs.readFileSync(shellUITestPath, 'utf8')
 assert.match(shellUITests, /XCUIApplication/, 'the shell suite must launch the real app')
-assert.match(shellUITests, /testStudentBuildHidesAccountEntryAndKeepsLearningSpacesNavigable/, 'the shell suite must cover student mode')
+assert.match(shellUITests, /testStudentBuildHidesAccountEntryAndRejectsAccountDeepLinks/, 'the shell suite must cover student account visibility')
+assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'the shell suite must cover every IELTS route')
+assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
+assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndDeepLink/, 'the shell suite must cover QA mode')
 assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
+assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
+for (const [buttonIdentifier, moduleIdentifier] of [
+  ['route-ielts-listening', 'web-module-ielts-listening'],
+  ['route-ielts-reading', 'web-module-ielts-reading'],
+  ['route-ielts-writing', 'web-module-ielts-writing'],
+  ['route-ielts-speaking', 'web-module-ielts-speaking'],
+  ['route-ielts-vocabulary', 'web-module-ielts-vocabulary'],
+  ['route-stem-ig', 'web-module-stem-ig'],
+  ['route-stem-as', 'web-module-stem-as'],
+  ['route-stem-a2', 'web-module-stem-a2'],
+  ['route-stem-topics', 'web-module-stem-topics'],
+  ['route-stem-past-papers', 'web-module-stem-past-papers'],
+  ['route-stem-notebook', 'web-module-stem-notebook'],
+  ['route-stem-coach', 'web-module-stem-coach'],
+]) {
+  assert.match(
+    shellUITests,
+    new RegExp(`"${buttonIdentifier}"[\\s\\S]*?"${moduleIdentifier}"`),
+    `the shell suite must exercise ${buttonIdentifier}`
+  )
+}
+for (const identifier of ['learning-space-ielts-practice', 'learning-space-stem-study', 'learning-space-ai-coach', 'open-notebook', 'open-stem-notebook']) {
+  assert.match(shellUITests, new RegExp(`"${identifier}"`), `the shell suite must exercise ${identifier}`)
+}
 
 assert.match(
   contentView,
@@ -439,6 +466,16 @@ assert.match(githubWorkflow, /runs-on:\s*macos-15/, 'macOS CI must use the macOS
 assert.match(githubWorkflow, /DEVELOPER_DIR:\s*\/Applications\/Xcode_16\.4\.app\/Contents\/Developer/, 'macOS CI must select Xcode 16.4 for XCUIApplication deep links')
 assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must compile the iOS Simulator product')
 assert.match(githubWorkflow, /xcodebuild test/, 'macOS CI must run native shell UI tests')
+assert.match(
+  githubWorkflow,
+  /TEST_TARGET_NAME=Stemist/,
+  'native shell tests must declare Stemist as their target application'
+)
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\s+\\/,
+  'macOS CI must run every student shell test instead of one smoke assertion'
+)
 assert.match(
   githubWorkflow,
   /set \+e[\s\S]*?cd "\$GITHUB_WORKSPACE\/Stemist\.swiftpm"[\s\S]*?xcodebuild test[\s\S]*?STEMIST_FULL_FEATURE_TEST=NO/,
