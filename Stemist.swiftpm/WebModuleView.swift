@@ -108,6 +108,8 @@ enum WebViewEnvironment {
 private enum AccountEntryVisibilityScript {
     static let hide = """
     (() => {
+        const host = window.location.hostname.toLowerCase();
+        if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
         const styleId = 'stemist-account-entry-visibility';
         const selectors = [
             '#sidebarAccountEntry',

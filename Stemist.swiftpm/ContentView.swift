@@ -318,6 +318,7 @@ private struct NotebookView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(StemistTheme.stem)
+                .accessibilityIdentifier("open-stem-notebook")
 
                 Spacer()
             }

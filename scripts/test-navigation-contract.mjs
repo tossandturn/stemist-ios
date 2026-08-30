@@ -62,6 +62,11 @@ assert.match(packageSwift, /\.iOS\("17\.0"\)/, 'the app should support iPadOS 17
 assert.doesNotMatch(packageSwift, /\.iOS\("18\.6"\)/, 'the deployment target must not require the newest iPadOS')
 assert.match(
   packageSwift,
+  /\.executableTarget\([\s\S]*?path:\s*"\."[\s\S]*?exclude:\s*\[\s*"Tests"\s*\]/,
+  'the app target must exclude UI-test sources so SwiftPM has no overlapping targets'
+)
+assert.match(
+  packageSwift,
   /bundleIdentifier:\s*"com\.ieltsist\.stemist"/,
   'device builds need a stable App Store Connect bundle identifier'
 )
@@ -159,6 +164,11 @@ assert.match(
 )
 assert.match(contentView, /fullScreenCover\(item:/, 'learning workspaces must open as immersive full-screen flows')
 assert.match(contentView, /accessibilityIdentifier\(/, 'primary routes need stable UI-test identifiers')
+assert.match(
+  contentView,
+  /Button\s*\{\s*selectedRoute\s*=\s*\.stemNotebook[\s\S]{0,800}?\.accessibilityIdentifier\("open-stem-notebook"\)/,
+  'the Notebook entry needs a stable native test identifier'
+)
 
 assert.match(contentView, /enum WebRoute\s*:/, 'ContentView must define typed web routes')
 assert.match(contentView, /selectedRoute\s*=\s*\.aiCoach/, 'Today must expose the unified AI Coach entry')
@@ -289,6 +299,11 @@ assert.doesNotMatch(
 assert.match(webModule, /onUnavailable:\s*\{\s*completionHandler\(false\)/, 'unpresentable confirms must fail closed instead of hanging the page')
 assert.match(webModule, /onUnavailable:\s*\{\s*completionHandler\(nil\)/, 'unpresentable prompts must complete without inventing input')
 assert.match(webModule, /WKUserScript/, 'normal mode must be able to hide account controls inside the web shell')
+assert.match(
+  webModule,
+  /const host = window\.location\.hostname\.toLowerCase\(\);\s*if \(host !== 'ieltsist\.com' && !host\.endsWith\('\.ieltsist\.com'\)\) return;\s*const styleId/s,
+  'account hiding must remain scoped to product hosts and leave third-party OAuth pages untouched'
+)
 assert.match(webModule, /CoachAutoOpenScript/, 'native Coach routes need a bounded web-side open action')
 assert.match(webModule, /globalHelpButton/, 'the Coach script must support the IELTSist global Coach trigger')
 assert.match(webModule, /ai-coach-trigger/, 'the Coach script must support the STEM Coach trigger')

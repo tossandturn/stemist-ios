@@ -11,6 +11,7 @@ var targets: [Target] = [
     .executableTarget(
         name: "AppModule",
         path: ".",
+        exclude: ["Tests"],
         swiftSettings: [
             .enableUpcomingFeature("BareSlashRegexLiterals")
         ]
