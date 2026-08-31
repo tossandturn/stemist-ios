@@ -26,8 +26,8 @@ final class StemistShellUITests: XCTestCase {
         attachScreenshot(named: "student-account-entry-hidden")
 
         app.terminate()
-        app.open(accountURL)
-        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 3))
+        openCustomURLFromSafari(accountURL)
+        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 10))
         XCTAssertFalse(tabButton("Profile").exists)
         XCTAssertFalse(webModule("web-module-ielts-account").waitForExistence(timeout: 1))
         XCTAssertTrue(app.otherElements["stemist-root"].exists)
@@ -152,11 +152,11 @@ final class StemistShellUITests: XCTestCase {
     }
 
     func testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch() {
-        app = XCUIApplication()
-        app.launchEnvironment["STEMIST_FULL_FEATURE_TEST"] = "YES"
-        app.open(accountURL)
+        launchApp(fullFeatureTest: true)
+        app.terminate()
+        openCustomURLFromSafari(accountURL)
 
-        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["stemist-root"].waitForExistence(timeout: 10))
         XCTAssertTrue(tabButton("Profile").exists)
         let accountModule = webModule("web-module-ielts-account")
         guard accountModule.waitForExistence(timeout: 5) else {
@@ -338,5 +338,86 @@ final class StemistShellUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func openCustomURLFromSafari(_ url: URL) {
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        safari.launch()
+
+        let addressField = safariAddressField(in: safari)
+        XCTAssertTrue(
+            addressField.waitForExistence(timeout: 8),
+            "Expected Safari to expose an address field before opening \(url.absoluteString).\n\n\(safari.debugDescription)"
+        )
+        guard addressField.exists else { return }
+
+        addressField.tap()
+        addressField.typeText(url.absoluteString)
+
+        let goButtons = [
+            safari.keyboards.buttons["go"],
+            safari.keyboards.buttons["Go"],
+            safari.buttons["Go"],
+        ]
+        for goButton in goButtons {
+            if goButton.waitForExistence(timeout: 1) {
+                goButton.tap()
+                acceptOpenInStemistPromptIfPresent(in: safari)
+                return
+            }
+        }
+
+        addressField.typeText("\n")
+        acceptOpenInStemistPromptIfPresent(in: safari)
+    }
+
+    private func safariAddressField(in safari: XCUIApplication) -> XCUIElement {
+        let labels = [
+            "Address",
+            "URL",
+            "Search or enter website name",
+            "Tab Bar",
+        ]
+        for label in labels {
+            let field = safari.textFields[label]
+            if field.exists {
+                return field
+            }
+        }
+        return safari.textFields.firstMatch
+    }
+
+    private func acceptOpenInStemistPromptIfPresent(in safari: XCUIApplication, timeout: TimeInterval = 8) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let buttonLabels = ["Open", "Allow", "Continue"]
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            for label in buttonLabels {
+                let springboardButton = springboard.buttons[label]
+                if springboardButton.exists && springboardButton.isHittable {
+                    springboardButton.tap()
+                    return
+                }
+
+                let safariButton = safari.buttons[label]
+                if safariButton.exists && safariButton.isHittable {
+                    safariButton.tap()
+                    return
+                }
+
+                let appButton = app.buttons[label]
+                if appButton.exists && appButton.isHittable {
+                    appButton.tap()
+                    return
+                }
+            }
+
+            if app.otherElements["stemist-root"].exists {
+                return
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
     }
 }

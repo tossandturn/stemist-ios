@@ -520,7 +520,7 @@ assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAn
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
-assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?app\.open\(accountURL\)/, 'the student account boundary must also survive a cold-launch deep link')
+assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?openCustomURLFromSafari\(accountURL\)/, 'the student account boundary must also survive a real cold-launch custom-scheme deep link')
 assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
   shellUITests,
@@ -537,7 +537,9 @@ assert.match(
   /tabButton\("Profile"\)/,
   'student mode must verify account-entry absence through the same floating-tab hierarchy used for navigation'
 )
-assert.match(shellUITests, /XCUIApplication[\s\S]*?\.open\(accountURL\)/, 'both shell modes must exercise the account deep link through XCUIApplication')
+assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the custom-scheme regression must open through Safari instead of the unreliable XCUIApplication.open URL shortcut')
+assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell modes must exercise the account deep link through the real custom-scheme path')
+assert.match(shellUITests, /acceptOpenInStemistPromptIfPresent/, 'the custom-scheme regression must handle the iOS Open confirmation prompt')
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
 assert.match(
