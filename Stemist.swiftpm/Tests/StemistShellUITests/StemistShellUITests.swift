@@ -428,16 +428,20 @@ final class StemistShellUITests: XCTestCase {
         let safariButton = safari.buttons.matching(promptPredicate).firstMatch
         let root = app.otherElements["stemist-root"]
         let deadline = Date().addingTimeInterval(timeout)
+        var didTapOpenPrompt = false
 
         while Date() < deadline {
             if app.state == .runningForeground, root.exists {
                 return true
             }
 
-            for promptButton in [springboardButton, safariButton] {
-                if promptButton.exists && promptButton.isHittable {
-                    promptButton.tap()
-                    break
+            if !didTapOpenPrompt {
+                for promptButton in [springboardButton, safariButton] {
+                    if promptButton.exists && promptButton.isHittable {
+                        promptButton.tap()
+                        didTapOpenPrompt = true
+                        break
+                    }
                 }
             }
 
@@ -454,8 +458,16 @@ final class StemistShellUITests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         return "Expected Safari to hand \(url.absoluteString) to Stemist."
             + "\n\nStemist state: \(app.state.rawValue)"
-            + "\n\nStemist hierarchy:\n\(app.debugDescription)"
-            + "\n\nSafari hierarchy:\n\(safari.debugDescription)"
-            + "\n\nSpringBoard hierarchy:\n\(springboard.debugDescription)"
+            + "\n\nStemist hierarchy:\n\(safeHierarchyDescription(for: app))"
+            + "\n\nSafari hierarchy:\n\(safeHierarchyDescription(for: safari))"
+            + "\n\nSpringBoard hierarchy:\n\(safeHierarchyDescription(for: springboard))"
+    }
+
+    private func safeHierarchyDescription(for application: XCUIApplication) -> String {
+        let state = application.state
+        guard state == .runningForeground else {
+            return "<hierarchy unavailable; application state=\(state.rawValue)>"
+        }
+        return application.debugDescription
     }
 }

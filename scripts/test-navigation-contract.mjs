@@ -615,6 +615,16 @@ assert.doesNotMatch(
   /promptButton\.tap\(\)\s*\n\s*return/,
   'a synthesized Open-prompt tap is not proof that iOS launched Stemist'
 )
+assert.match(
+  shellUITests,
+  /var\s+didTapOpenPrompt\s*=\s*false[\s\S]{0,900}?if\s+!didTapOpenPrompt\s*\{[\s\S]{0,700}?promptButton\.tap\(\)[\s\S]{0,160}?didTapOpenPrompt\s*=\s*true/,
+  'custom-scheme handoff must stop querying Safari and SpringBoard prompt elements after the first successful tap'
+)
+assert.match(
+  shellUITests,
+  /private func safeHierarchyDescription\(for application: XCUIApplication\)[\s\S]{0,500}?application\.state[\s\S]{0,500}?\.runningForeground[\s\S]{0,500}?application\.debugDescription/,
+  'custom-scheme failure diagnostics must not snapshot an application that is no longer foreground'
+)
 assert.doesNotMatch(
   shellUITests,
   /for\s+label\s+in\s+buttonLabels/,
