@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Stemist</string>
+	<key>CFBundleName</key>
+	<string>Stemist</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Use the microphone for IELTS speaking practice and voice feedback.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Use the camera to capture handwritten STEM work for marking.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose handwritten work and source files from your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.ieltsist.stemist</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>stemist</string>
+			</array>
+		</dict>
+	</array>
+	<key>STEMIST_FULL_FEATURE_TEST</key>
+	<string>$(STEMIST_FULL_FEATURE_TEST)</string>
+</dict>
+</plist>

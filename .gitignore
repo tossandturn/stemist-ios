@@ -29,6 +29,11 @@ playground.xcworkspace
 # hence it is not needed unless you have added a package configuration file to your project
 # .swiftpm
 
+# Swift Playgrounds regenerates this manifest from Package.swift. Keeping it
+# out of source control prevents stale app names, deployment targets, or
+# capabilities from being reused on iPad.
+Stemist.swiftpm/.swiftpm/playgrounds/CachedManifest.plist
+
 .build/
 
 # CocoaPods

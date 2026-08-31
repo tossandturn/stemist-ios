@@ -7,15 +7,27 @@
 import PackageDescription
 import AppleProductTypes
 
+var targets: [Target] = [
+    .executableTarget(
+        name: "AppModule",
+        path: ".",
+        exclude: ["Tests"],
+        swiftSettings: [
+            .enableUpcomingFeature("BareSlashRegexLiterals")
+        ]
+    )
+]
+
 let package = Package(
     name: "Stemist",
     platforms: [
-        .iOS("18.6")
+        .iOS("17.0")
     ],
     products: [
         .iOSApplication(
             name: "Stemist",
             targets: ["AppModule"],
+            bundleIdentifier: "com.ieltsist.stemist",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .placeholder(icon: .calendar),
@@ -29,16 +41,20 @@ let package = Package(
                 .landscapeRight,
                 .landscapeLeft,
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
-            ]
+            ],
+            capabilities: [
+                .microphone(
+                    purposeString: "Use the microphone for IELTS speaking practice and voice feedback."
+                ),
+                .camera(
+                    purposeString: "Use the camera to capture handwritten STEM work for marking."
+                ),
+                .photoLibrary(
+                    purposeString: "Choose handwritten work and source files from your photo library."
+                )
+            ],
+            additionalInfoPlistContentFilePath: "Info.plist"
         )
     ],
-    targets: [
-        .executableTarget(
-            name: "AppModule",
-            path: ".",
-            swiftSettings: [
-                .enableUpcomingFeature("BareSlashRegexLiterals")
-            ]
-        )
-    ]
+    targets: targets
 )
