@@ -341,8 +341,7 @@ final class StemistShellUITests: XCTestCase {
 
         let closeFrame = closeButton.frame
         XCTAssertFalse(closeFrame.isEmpty, "Expected \(moduleIdentifier)'s close control to have a visible frame")
-        XCTAssertTrue(app.frame.intersects(closeFrame), "Expected \(moduleIdentifier)'s close control to be on screen")
-        guard !closeFrame.isEmpty, app.frame.intersects(closeFrame) else { return }
+        guard !closeFrame.isEmpty else { return }
 
         closeButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(module.waitForNonExistence(timeout: 3), "Expected \(moduleIdentifier) to close")

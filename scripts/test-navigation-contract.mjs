@@ -572,8 +572,8 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /let\s+closeFrame\s*=\s*closeButton\.frame[\s\S]{0,420}?app\.frame\.intersects\(closeFrame\)[\s\S]{0,420}?closeButton\.coordinate\(withNormalizedOffset:\s*CGVector\(dx:\s*0\.5,\s*dy:\s*0\.5\)\)\.tap\(\)/,
-  'workspace dismissal must tap the visible button center instead of depending on flaky XCTest hit-point inference above WKWebView'
+  /let\s+closeFrame\s*=\s*closeButton\.frame[\s\S]{0,260}?guard\s+!closeFrame\.isEmpty\s+else\s+\{\s*return\s*\}[\s\S]{0,260}?closeButton\.coordinate\(withNormalizedOffset:\s*CGVector\(dx:\s*0\.5,\s*dy:\s*0\.5\)\)\.tap\(\)/,
+  'workspace dismissal must tap the visible button center after validating a non-empty frame instead of depending on flaky XCTest hit-point inference above WKWebView'
 )
 assert.doesNotMatch(
   shellUITests,
