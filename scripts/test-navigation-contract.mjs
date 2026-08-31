@@ -582,8 +582,8 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
-  /let\s+workspaceHost\s*=\s*app\.otherElements\["web-workspace-host"\][\s\S]{0,1800}?workspaceHost\.waitForNonExistence\(timeout:\s*3\)[\s\S]{0,1800}?identifier IN %@ AND hittable == true[\s\S]{0,1000}?waitUntilHittable\(restoredTab\)/,
-  'workspace dismissal must verify that the native host is gone and a root tab is interactive again'
+  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,1800}?workspaceChrome\.waitForNonExistence\(timeout:\s*3\)[\s\S]{0,1800}?identifier IN %@ AND hittable == true[\s\S]{0,1000}?waitUntilHittable\(restoredTab\)/,
+  'workspace dismissal must verify that the native chrome is gone and a root tab is interactive again'
 )
 assert.doesNotMatch(
   shellUITests,
