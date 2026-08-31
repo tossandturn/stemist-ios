@@ -99,6 +99,8 @@ private struct WebWorkspaceChrome: View {
                     Image(systemName: "person.crop.circle")
                         .frame(width: 44, height: 44)
                 }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .accessibilityLabel("Open account")
                 .accessibilityIdentifier("web-open-account")
                 .accessibilityElement(children: .ignore)
@@ -111,6 +113,8 @@ private struct WebWorkspaceChrome: View {
                 Image(systemName: "xmark")
                     .frame(width: 44, height: 44)
             }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .accessibilityLabel("Close \(route.title)")
             .accessibilityIdentifier("web-close")
             .accessibilityElement(children: .ignore)
@@ -138,7 +142,14 @@ private struct WebWorkspaceHost: View {
     let onDisappear: (UUID) -> Void
 
     var body: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
+            WebWorkspaceChrome(
+                route: launch.route,
+                allowsAccountEntry: configuration.showsAccountEntry,
+                requestLaunch: requestLaunch,
+                dismissWorkspace: dismissWorkspace
+            )
+
             WebModuleView(
                 launch: launch,
                 requestLaunch: requestLaunch,
@@ -146,15 +157,6 @@ private struct WebWorkspaceHost: View {
             )
             .id(launch.id)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            WebWorkspaceChrome(
-                route: launch.route,
-                allowsAccountEntry: configuration.showsAccountEntry,
-                requestLaunch: requestLaunch,
-                dismissWorkspace: dismissWorkspace
-            )
-            .zIndex(1)
-            .allowsHitTesting(true)
         }
         .onAppear { onMount(launch) }
         .onDisappear { onDisappear(presentationID) }

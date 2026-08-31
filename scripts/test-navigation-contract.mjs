@@ -186,6 +186,11 @@ assert.match(
 )
 assert.match(
   contentView,
+  /private\s+struct\s+WebWorkspaceHost[\s\S]{0,1600}?var\s+body:\s+some\s+View\s*\{\s*VStack\(spacing:\s*0\)\s*\{[\s\S]{0,600}?WebWorkspaceChrome\([\s\S]{0,600}?WebModuleView\(/,
+  'the workspace host must vertically separate chrome from the web view so close controls stay hittable'
+)
+assert.match(
+  contentView,
   /@Published\s+private\(set\)\s+var\s+activeLaunch:\s*WebRouteLaunch\?/,
   'the coordinator must expose the active route to the workspace host'
 )
@@ -252,8 +257,8 @@ assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome:\s*View/, 'the 
 assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,1800}?accessibilityIdentifier\("web-close"\)/, 'the root workspace chrome must own the close control')
 assert.match(
   contentView,
-  /WebModuleView\([\s\S]{0,1800}?WebWorkspaceChrome\(/,
-  'the host must place native workspace chrome above the embedded web module'
+  /VStack\(spacing:\s*0\)[\s\S]{0,700}?WebWorkspaceChrome\([\s\S]{0,700}?WebModuleView\(/,
+  'the host must vertically place native workspace chrome above the embedded web module'
 )
 assert.doesNotMatch(webModule, /private\s+var\s+workspaceHeader:/, 'the web module must not own host-level dismissal chrome')
 assert.doesNotMatch(webModule, /\.toolbar\b/, 'workspace actions must not depend on a delayed NavigationStack toolbar')
@@ -811,13 +816,8 @@ assert.match(
 )
 assert.match(
   contentView,
-  /private\s+struct\s+WebWorkspaceHost[\s\S]{0,500}?ZStack\(alignment:\s*\.top\)[\s\S]{0,1200}?WebModuleView\([\s\S]{0,900}?WebWorkspaceChrome\(/,
-  'the workspace host must layer the web module below native chrome so iPad controls stay visible and hittable'
-)
-assert.match(
-  contentView,
-  /WebWorkspaceChrome\([\s\S]{0,900}?\.zIndex\(1\)[\s\S]{0,300}?\.allowsHitTesting\(true\)/,
-  'native workspace chrome must remain the interactive top layer above the embedded web view'
+  /private\s+struct\s+WebWorkspaceHost[\s\S]{0,500}?VStack\(spacing:\s*0\)[\s\S]{0,1200}?WebWorkspaceChrome\([\s\S]{0,900}?WebModuleView\(/,
+  'the workspace host must vertically separate the web module from native chrome so iPad controls stay visible and hittable'
 )
 assert.match(
   webModule,
