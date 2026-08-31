@@ -567,8 +567,18 @@ assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell 
 assert.match(shellUITests, /acceptOpenInStemistPromptIfPresent/, 'the custom-scheme regression must handle the iOS Open confirmation prompt')
 assert.match(
   shellUITests,
-  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,260}?workspaceChrome\.buttons\["web-close"\]/,
-  'workspace dismissal tests must scope the native close control above the web view hierarchy'
+  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,220}?workspaceChrome\.waitForExistence[\s\S]{0,220}?let\s+closeButton\s*=\s*app\.buttons\["web-close"\]/,
+  'workspace dismissal tests must wait for native chrome before resolving the global close accessibility element'
+)
+assert.match(
+  shellUITests,
+  /let\s+closeFrame\s*=\s*closeButton\.frame[\s\S]{0,420}?app\.frame\.intersects\(closeFrame\)[\s\S]{0,420}?closeButton\.coordinate\(withNormalizedOffset:\s*CGVector\(dx:\s*0\.5,\s*dy:\s*0\.5\)\)\.tap\(\)/,
+  'workspace dismissal must tap the visible button center instead of depending on flaky XCTest hit-point inference above WKWebView'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /waitUntilHittable\(closeButton/,
+  'workspace close coverage must not use XCTest hittability, which can report an invalid activation point for a visible SwiftUI button above WKWebView'
 )
 assert.match(
   shellUITests,

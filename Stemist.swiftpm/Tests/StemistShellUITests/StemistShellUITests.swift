@@ -325,14 +325,26 @@ final class StemistShellUITests: XCTestCase {
         guard module.exists else { return }
 
         let workspaceChrome = app.otherElements["web-workspace-chrome"]
-        let closeButton = workspaceChrome.buttons["web-close"]
         XCTAssertTrue(
-            waitUntilHittable(closeButton),
+            workspaceChrome.waitForExistence(timeout: 3),
+            "Expected \(moduleIdentifier) to mount its native workspace chrome."
+                + "\n\nAccessibility hierarchy while the module is open:\n\(app.debugDescription)"
+        )
+
+        let closeButton = app.buttons["web-close"]
+        XCTAssertTrue(
+            closeButton.waitForExistence(timeout: 3),
             "Expected \(moduleIdentifier) to expose a close control."
                 + "\n\nAccessibility hierarchy while the module is open:\n\(app.debugDescription)"
         )
-        guard closeButton.exists, closeButton.isHittable else { return }
-        closeButton.tap()
+        guard closeButton.exists else { return }
+
+        let closeFrame = closeButton.frame
+        XCTAssertFalse(closeFrame.isEmpty, "Expected \(moduleIdentifier)'s close control to have a visible frame")
+        XCTAssertTrue(app.frame.intersects(closeFrame), "Expected \(moduleIdentifier)'s close control to be on screen")
+        guard !closeFrame.isEmpty, app.frame.intersects(closeFrame) else { return }
+
+        closeButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(module.waitForNonExistence(timeout: 3), "Expected \(moduleIdentifier) to close")
     }
 
