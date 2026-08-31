@@ -872,6 +872,11 @@ assert.match(
 assert.ok(fs.existsSync(githubWorkflowPath), 'a macOS CI build is required when Windows cannot compile Swift')
 const githubWorkflow = fs.readFileSync(githubWorkflowPath, 'utf8')
 assert.match(githubWorkflow, /runs-on:\s*macos-15/, 'macOS CI must use the macOS 15 Apple runner')
+assert.match(
+  githubWorkflow,
+  /group:\s*ios-simulator-\$\{\{\s*github\.workflow\s*\}\}-\$\{\{\s*github\.event_name\s*\}\}-\$\{\{\s*github\.ref\s*\}\}/,
+  'push and pull-request simulator evidence must use separate concurrency groups'
+)
 assert.match(githubWorkflow, /DEVELOPER_DIR:\s*\/Applications\/Xcode_16\.4\.app\/Contents\/Developer/, 'macOS CI must select Xcode 16.4 for XCUIApplication deep links')
 assert.match(githubWorkflow, /xcodebuild[\s\S]*iphonesimulator/, 'macOS CI must compile the iOS Simulator product')
 assert.match(githubWorkflow, /xcodebuild test/, 'macOS CI must run native shell UI tests')
