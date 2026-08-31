@@ -323,7 +323,11 @@ final class StemistShellUITests: XCTestCase {
         guard module.exists else { return }
 
         let closeButton = app.buttons["web-close"]
-        XCTAssertTrue(waitUntilHittable(closeButton), "Expected \(moduleIdentifier) to expose a close control")
+        XCTAssertTrue(
+            waitUntilHittable(closeButton),
+            "Expected \(moduleIdentifier) to expose a close control."
+                + "\n\nAccessibility hierarchy while the module is open:\n\(app.debugDescription)"
+        )
         guard closeButton.exists, closeButton.isHittable else { return }
         closeButton.tap()
         XCTAssertTrue(module.waitForNonExistence(timeout: 3), "Expected \(moduleIdentifier) to close")

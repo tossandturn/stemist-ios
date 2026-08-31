@@ -232,7 +232,7 @@ assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome:\s*View/, 'the 
 assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,1800}?accessibilityIdentifier\("web-close"\)/, 'the root workspace chrome must own the close control')
 assert.match(
   contentView,
-  /WebWorkspaceChrome\([\s\S]{0,1800}?WebModuleView\(/,
+  /WebModuleView\([\s\S]{0,1800}?WebWorkspaceChrome\(/,
   'the host must place native workspace chrome above the embedded web module'
 )
 assert.doesNotMatch(webModule, /private\s+var\s+workspaceHeader:/, 'the web module must not own host-level dismissal chrome')
@@ -274,7 +274,11 @@ assert.doesNotMatch(
   /init\?\(url:\s*URL,\s*allowsAccountEntry:\s*Bool\s*=\s*true/,
   'account visibility must be explicit at every deep-link call site'
 )
-assert.doesNotMatch(contentView, /\.onOpenURL\s*\{/, 'deep-link capture must not depend on a transient root view callback')
+assert.match(
+  contentView,
+  /\.onOpenURL\s*\{\s*url\s+in[\s\S]{0,220}?routeCoordinator\.receive\(url,\s*source:\s*"contentView\.onOpenURL"\)/,
+  'the root view may receive a supplementary URL callback only when it forwards the URL with an explicit source'
+)
 assert.match(contentView, /queryItems/, 'deep links must support route query parameters')
 assert.match(
   contentView,
@@ -762,6 +766,26 @@ assert.match(
   contentView,
   /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,1800}?dismissWorkspace\(\)/,
   'the root close control must dismiss the workspace without depending on WebView toolbar timing'
+)
+assert.match(
+  contentView,
+  /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,2200}?accessibilityElement\(children:\s*\.contain\)[\s\S]{0,240}?accessibilityIdentifier\("web-workspace-chrome"\)/,
+  'the workspace chrome must preserve separate native controls in the iPad accessibility tree'
+)
+assert.match(
+  contentView,
+  /private\s+struct\s+WebWorkspaceHost[\s\S]{0,2400}?accessibilityElement\(children:\s*\.contain\)[\s\S]{0,260}?accessibilityIdentifier\("web-workspace-host"\)/,
+  'the workspace host must expose an explicit accessibility container around the embedded module'
+)
+assert.match(
+  contentView,
+  /private\s+struct\s+WebWorkspaceHost[\s\S]{0,500}?ZStack\(alignment:\s*\.top\)[\s\S]{0,1200}?WebModuleView\([\s\S]{0,900}?WebWorkspaceChrome\(/,
+  'the workspace host must layer the web module below native chrome so iPad controls stay visible and hittable'
+)
+assert.match(
+  contentView,
+  /WebWorkspaceChrome\([\s\S]{0,900}?\.zIndex\(1\)[\s\S]{0,300}?\.allowsHitTesting\(true\)/,
+  'native workspace chrome must remain the interactive top layer above the embedded web view'
 )
 assert.match(
   webModule,

@@ -101,6 +101,7 @@ private struct WebWorkspaceChrome: View {
                 }
                 .accessibilityLabel("Open account")
                 .accessibilityIdentifier("web-open-account")
+                .accessibilityElement(children: .ignore)
                 .help("Open account")
             }
 
@@ -112,6 +113,7 @@ private struct WebWorkspaceChrome: View {
             }
             .accessibilityLabel("Close \(route.title)")
             .accessibilityIdentifier("web-close")
+            .accessibilityElement(children: .ignore)
             .help("Close")
         }
         .padding(.horizontal, 16)
@@ -120,6 +122,8 @@ private struct WebWorkspaceChrome: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("web-workspace-chrome")
     }
 }
 
@@ -134,14 +138,7 @@ private struct WebWorkspaceHost: View {
     let onDisappear: (UUID) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            WebWorkspaceChrome(
-                route: launch.route,
-                allowsAccountEntry: configuration.showsAccountEntry,
-                requestLaunch: requestLaunch,
-                dismissWorkspace: dismissWorkspace
-            )
-
+        ZStack(alignment: .top) {
             WebModuleView(
                 launch: launch,
                 requestLaunch: requestLaunch,
@@ -149,10 +146,22 @@ private struct WebWorkspaceHost: View {
             )
             .id(launch.id)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            WebWorkspaceChrome(
+                route: launch.route,
+                allowsAccountEntry: configuration.showsAccountEntry,
+                requestLaunch: requestLaunch,
+                dismissWorkspace: dismissWorkspace
+            )
+            .zIndex(1)
+            .allowsHitTesting(true)
         }
         .onAppear { onMount(launch) }
         .onDisappear { onDisappear(presentationID) }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("web-workspace-host")
+        .accessibilityValue(launch.route.id)
     }
 }
 
@@ -316,6 +325,7 @@ struct ContentView: View {
         .onAppear {
             normalizeSelectedTab()
             rootIsReady = true
+            consumePendingExternalURLIfReady()
         }
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
@@ -326,6 +336,9 @@ struct ContentView: View {
         }
         .onChange(of: routeCoordinator.pendingURL) { _, _ in
             consumePendingExternalURLIfReady()
+        }
+        .onOpenURL { url in
+            routeCoordinator.receive(url, source: "contentView.onOpenURL")
         }
         .task(id: pendingExternalURLTaskID) {
             guard rootIsReady, routeCoordinator.pendingURL != nil else { return }
@@ -339,6 +352,13 @@ struct ContentView: View {
                 } catch {
                     return
                 }
+            }
+        }
+        .task {
+            consumePendingExternalURLIfReady()
+            for await _ in routeCoordinator.$pendingURL.values {
+                guard !Task.isCancelled else { return }
+                consumePendingExternalURLIfReady()
             }
         }
 #if DEBUG
