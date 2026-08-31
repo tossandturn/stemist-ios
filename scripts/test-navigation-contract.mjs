@@ -564,7 +564,7 @@ assert.match(
 )
 assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the custom-scheme regression must open through Safari instead of the unreliable XCUIApplication.open URL shortcut')
 assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell modes must exercise the account deep link through the real custom-scheme path')
-assert.match(shellUITests, /acceptOpenInStemistPromptIfPresent/, 'the custom-scheme regression must handle the iOS Open confirmation prompt')
+assert.match(shellUITests, /waitForStemistHandoff/, 'the custom-scheme regression must wait for the iOS handoff to finish')
 assert.match(
   shellUITests,
   /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,220}?workspaceChrome\.waitForExistence[\s\S]{0,220}?let\s+closeButton\s*=\s*app\.buttons\["web-close"\]/,
@@ -599,6 +599,21 @@ assert.match(
   shellUITests,
   /let\s+promptPredicate\s*=\s*NSPredicate\(format:\s*"label IN %@",\s*buttonLabels\)[\s\S]{0,360}?springboard\.buttons\.matching\(promptPredicate\)\.firstMatch[\s\S]{0,360}?safari\.buttons\.matching\(promptPredicate\)\.firstMatch/,
   'custom-scheme prompt polling must query every accepted label per host so one slow accessibility pass cannot exhaust the deadline'
+)
+assert.match(
+  shellUITests,
+  /private func waitForStemistHandoff[\s\S]{0,1200}?let\s+root\s*=\s*app\.otherElements\["stemist-root"\][\s\S]{0,700}?app\.state\s*==\s*\.runningForeground,\s*root\.exists/,
+  'custom-scheme handoff is complete only after Stemist is foreground and its root has mounted'
+)
+assert.match(
+  shellUITests,
+  /goButton\.tap\(\)[\s\S]{0,260}?waitForStemistHandoff\(from:\s*safari\)/,
+  'submitting the Safari URL must wait for the app handoff instead of returning after the prompt tap'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /promptButton\.tap\(\)\s*\n\s*return/,
+  'a synthesized Open-prompt tap is not proof that iOS launched Stemist'
 )
 assert.doesNotMatch(
   shellUITests,

@@ -379,13 +379,19 @@ final class StemistShellUITests: XCTestCase {
         for goButton in goButtons {
             if goButton.waitForExistence(timeout: 1) {
                 goButton.tap()
-                acceptOpenInStemistPromptIfPresent(in: safari)
+                XCTAssertTrue(
+                    waitForStemistHandoff(from: safari),
+                    customURLHandoffFailureDescription(safari: safari, url: url)
+                )
                 return
             }
         }
 
         safari.typeText("\n")
-        acceptOpenInStemistPromptIfPresent(in: safari)
+        XCTAssertTrue(
+            waitForStemistHandoff(from: safari),
+            customURLHandoffFailureDescription(safari: safari, url: url)
+        )
     }
 
     private func safariAddressField(in safari: XCUIApplication) -> XCUIElement {
@@ -411,28 +417,45 @@ final class StemistShellUITests: XCTestCase {
         return safari.textFields.firstMatch
     }
 
-    private func acceptOpenInStemistPromptIfPresent(in safari: XCUIApplication, timeout: TimeInterval = 8) {
+    private func waitForStemistHandoff(
+        from safari: XCUIApplication,
+        timeout: TimeInterval = 12
+    ) -> Bool {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let buttonLabels = ["Open", "Allow", "Continue"]
         let promptPredicate = NSPredicate(format: "label IN %@", buttonLabels)
         let springboardButton = springboard.buttons.matching(promptPredicate).firstMatch
         let safariButton = safari.buttons.matching(promptPredicate).firstMatch
+        let root = app.otherElements["stemist-root"]
         let deadline = Date().addingTimeInterval(timeout)
 
         while Date() < deadline {
+            if app.state == .runningForeground, root.exists {
+                return true
+            }
+
             for promptButton in [springboardButton, safariButton] {
                 if promptButton.exists && promptButton.isHittable {
                     promptButton.tap()
-                    return
+                    break
                 }
-            }
-
-            if app.state == .runningForeground,
-               app.otherElements["stemist-root"].exists {
-                return
             }
 
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
+
+        return app.state == .runningForeground && root.exists
+    }
+
+    private func customURLHandoffFailureDescription(
+        safari: XCUIApplication,
+        url: URL
+    ) -> String {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        return "Expected Safari to hand \(url.absoluteString) to Stemist."
+            + "\n\nStemist state: \(app.state.rawValue)"
+            + "\n\nStemist hierarchy:\n\(app.debugDescription)"
+            + "\n\nSafari hierarchy:\n\(safari.debugDescription)"
+            + "\n\nSpringBoard hierarchy:\n\(springboard.debugDescription)"
     }
 }
