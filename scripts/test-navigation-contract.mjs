@@ -582,8 +582,13 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
-  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,1800}?workspaceChrome\.waitForNonExistence\(timeout:\s*3\)[\s\S]{0,1800}?identifier IN %@ AND hittable == true[\s\S]{0,1000}?waitUntilHittable\(restoredTab\)/,
-  'workspace dismissal must verify that the native chrome is gone and a root tab is interactive again'
+  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,1800}?workspaceChrome\.waitForNonExistence\(timeout:\s*3\)[\s\S]{0,2200}?let\s+restoredTabCandidates\s*=\s*app\.buttons\.matching\([\s\S]{0,220}?identifier IN %@[\s\S]{0,500}?restoredTabCandidates\.allElementsBoundByIndex\.first\(where:\s*\{[\s\S]{0,260}?\$0\.exists\s+&&\s+\$0\.isHittable[\s\S]{0,260}?restoredTabCandidates\.firstMatch[\s\S]{0,500}?waitUntilHittable\(restoredTab\)/,
+  'workspace dismissal must verify that the native chrome is gone and a root tab is interactive again without using an invalid compound hittability predicate'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /identifier IN %@ AND hittable == true/,
+  'restored root-tab lookup must not combine identifier IN with XCTest hittability in one predicate'
 )
 assert.doesNotMatch(
   shellUITests,

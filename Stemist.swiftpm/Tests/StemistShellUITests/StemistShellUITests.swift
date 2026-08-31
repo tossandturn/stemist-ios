@@ -356,9 +356,12 @@ final class StemistShellUITests: XCTestCase {
         }
 
         let tabIdentifiers = ["tab-today", "tab-ielts", "tab-stem", "tab-notebook", "tab-profile"]
-        let restoredTab = app.buttons.matching(
-            NSPredicate(format: "identifier IN %@ AND hittable == true", tabIdentifiers)
-        ).firstMatch
+        let restoredTabCandidates = app.buttons.matching(
+            NSPredicate(format: "identifier IN %@", tabIdentifiers)
+        )
+        let restoredTab = restoredTabCandidates.allElementsBoundByIndex.first(where: {
+            $0.exists && $0.isHittable
+        }) ?? restoredTabCandidates.firstMatch
         XCTAssertTrue(
             waitUntilHittable(restoredTab),
             "Expected the native product shell to become interactive after closing \(moduleIdentifier)."
