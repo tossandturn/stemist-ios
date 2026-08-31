@@ -34,6 +34,10 @@ final class AppRouteCoordinator: ObservableObject {
     private func record(_ event: String, url: URL? = nil) {}
     #endif
 
+    func observeLifecycle(_ source: String, urlCount: Int) {
+        record("lifecycle[\(source)] count=\(urlCount)")
+    }
+
     func receive(_ url: URL, source: String = "unknown") {
         record("receive[\(source)]", url: url)
         guard pendingURL != url else { return }
@@ -71,7 +75,12 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        if let url = launchOptions?[.url] as? URL {
+        let launchURL = launchOptions?[.url] as? URL
+        routeCoordinator.observeLifecycle(
+            "appDelegate.didFinishLaunching",
+            urlCount: launchURL == nil ? 0 : 1
+        )
+        if let url = launchURL {
             routeCoordinator.receive(url, source: "appDelegate.didFinishLaunching")
         }
         return true
@@ -91,6 +100,10 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options connectionOptions: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
+        routeCoordinator.observeLifecycle(
+            "appDelegate.configurationForConnecting",
+            urlCount: connectionOptions.urlContexts.count
+        )
         connectionOptions.urlContexts.forEach { context in
             routeCoordinator.receive(
                 context.url,
@@ -126,6 +139,7 @@ final class StemistSceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     private func receive(_ contexts: Set<UIOpenURLContext>, source: String) {
+        routeCoordinator.observeLifecycle(source, urlCount: contexts.count)
         contexts.forEach { context in
             routeCoordinator.receive(context.url, source: source)
         }

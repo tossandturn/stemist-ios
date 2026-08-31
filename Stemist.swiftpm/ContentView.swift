@@ -361,10 +361,11 @@ struct ContentView: View {
                 consumePendingExternalURLIfReady()
             }
         }
+        .accessibilityIdentifier("stemist-root")
 #if DEBUG
+        .accessibilityLabel("Stemist root")
         .accessibilityValue("\(routeCoordinator.debugSnapshot) | \(webWorkspace.debugSnapshot)")
 #endif
-        .accessibilityIdentifier("stemist-root")
     }
 }
 

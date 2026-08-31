@@ -90,10 +90,25 @@ assert.doesNotMatch(
   'the app-owned main-actor route coordinator must be injected instead of constructed in a nonisolated default argument'
 )
 assert.match(stemistApp, /didFinishLaunchingWithOptions[\s\S]{0,360}?routeCoordinator\.receive\(url,\s*source:\s*"appDelegate\.didFinishLaunching"\)/, 'the app delegate must retain launch URLs with an explicit source')
+assert.match(
+  stemistApp,
+  /didFinishLaunchingWithOptions[\s\S]{0,360}?routeCoordinator\.observeLifecycle\(\s*"appDelegate\.didFinishLaunching",\s*urlCount:/,
+  'debug builds must record whether the app-delegate launch boundary received a URL'
+)
 assert.match(stemistApp, /application\([\s\S]{0,260}?open\s+url:\s*URL[\s\S]{0,260}?routeCoordinator\.receive\(url,\s*source:\s*"appDelegate\.openURL"\)/, 'the app delegate must retain warm URLs with an explicit source')
 assert.match(stemistApp, /configurationForConnecting[\s\S]*?connectionOptions\.urlContexts[\s\S]*?routeCoordinator\.receive\([\s\S]*?context\.url,[\s\S]*?source:\s*"appDelegate\.configurationForConnecting"/, 'cold-launch scene connection must capture URL contexts before the root mounts')
+assert.match(
+  stemistApp,
+  /configurationForConnecting[\s\S]{0,520}?routeCoordinator\.observeLifecycle\(\s*"appDelegate\.configurationForConnecting",\s*urlCount:\s*connectionOptions\.urlContexts\.count/,
+  'debug builds must expose whether scene configuration received cold-launch URL contexts'
+)
 assert.match(stemistApp, /configuration\.delegateClass\s*=\s*StemistSceneDelegate\.self/, 'cold-launch URL delivery must use an explicit scene delegate')
 assert.match(stemistApp, /final\s+class\s+StemistSceneDelegate[\s\S]{0,1400}?willConnectTo[\s\S]{0,500}?receive\(connectionOptions\.urlContexts,\s*source:\s*"scene\.willConnectTo"\)/, 'the scene delegate must retain URL contexts during cold launch')
+assert.match(
+  stemistApp,
+  /private\s+func\s+receive\(_\s+contexts:[\s\S]{0,300}?routeCoordinator\.observeLifecycle\(source,\s*urlCount:\s*contexts\.count\)/,
+  'debug builds must expose URL counts at every scene lifecycle boundary'
+)
 assert.match(stemistApp, /func\s+scene\(_\s+scene:\s*UIScene,\s*openURLContexts\s+URLContexts:\s*Set<UIOpenURLContext>\)/, 'the scene delegate must receive URLs delivered after scene connection')
 assert.match(stemistApp, /scene\(_\s*scene:\s*UIScene,\s*openURLContexts[\s\S]{0,360}?receive\(URLContexts,\s*source:\s*"scene\.openURLContexts"\)/, 'the scene delegate must retain URLs delivered after scene connection with an explicit source')
 assert.doesNotMatch(stemistApp, /routeCoordinator:\s*AppRouteCoordinator\?/, 'scene URL capture must not depend on a nil coordinator delegate')
@@ -143,6 +158,11 @@ assert.match(
   contentView,
   /#if DEBUG[\s\S]{0,260}?routeCoordinator\.debugSnapshot[\s\S]{0,180}?webWorkspace\.debugSnapshot/,
   'debug builds must expose both routing and workspace snapshots for lifecycle diagnosis'
+)
+assert.match(
+  contentView,
+  /accessibilityIdentifier\("stemist-root"\)[\s\S]{0,220}?#if DEBUG[\s\S]{0,260}?accessibilityValue\("\\\(routeCoordinator\.debugSnapshot\) \| \\\(webWorkspace\.debugSnapshot\)"\)/,
+  'the root accessibility element must expose routing diagnostics to the iPad UI suite'
 )
 assert.doesNotMatch(
   contentView,

@@ -160,8 +160,10 @@ final class StemistShellUITests: XCTestCase {
         XCTAssertTrue(tabButton("Profile").exists)
         let accountModule = webModule("web-module-ielts-account")
         guard accountModule.waitForExistence(timeout: 5) else {
+            let root = app.otherElements["stemist-root"]
             XCTFail(
                 "Expected a cold-launch account deep link to open the QA account module."
+                    + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
                     + "\n\nAccessibility hierarchy after cold launch:\n\(app.debugDescription)"
             )
             return
