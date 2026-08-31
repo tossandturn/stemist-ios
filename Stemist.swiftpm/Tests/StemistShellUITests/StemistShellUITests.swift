@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 final class StemistShellUITests: XCTestCase {
@@ -277,7 +278,10 @@ final class StemistShellUITests: XCTestCase {
 
     private func openAndCloseRoute(buttonIdentifier: String, moduleIdentifier: String) {
         let routeButton = app.buttons[buttonIdentifier]
-        XCTAssertTrue(waitUntilHittable(routeButton), "Expected \(buttonIdentifier) to be available and hittable")
+        XCTAssertTrue(
+            waitUntilHittableByScrolling(routeButton),
+            "Expected \(buttonIdentifier) to be available and hittable.\n\n\(app.debugDescription)"
+        )
         guard routeButton.exists, routeButton.isHittable else { return }
         routeButton.tap()
 
@@ -301,6 +305,18 @@ final class StemistShellUITests: XCTestCase {
         let predicate = NSPredicate(format: "exists == true AND hittable == true")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitUntilHittableByScrolling(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if waitUntilHittable(element, timeout: 0.5) {
+                return true
+            }
+            guard element.exists else { continue }
+            app.swipeUp()
+        }
+        return element.exists && element.isHittable
     }
 
     private func closeWebModule(_ module: XCUIElement, named moduleIdentifier: String) {

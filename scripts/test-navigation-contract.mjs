@@ -89,17 +89,19 @@ assert.doesNotMatch(
   /routeCoordinator:\s*AppRouteCoordinator\s*=\s*AppRouteCoordinator\(\)/,
   'the app-owned main-actor route coordinator must be injected instead of constructed in a nonisolated default argument'
 )
-assert.match(stemistApp, /\.onOpenURL\s*\{\s*url\s+in[\s\S]{0,180}?routeCoordinator\.receive\(url\)/, 'the app lifecycle boundary must capture incoming URLs durably')
-assert.match(stemistApp, /configurationForConnecting[\s\S]{0,500}?connectionOptions\.urlContexts[\s\S]{0,320}?routeCoordinator\.receive\(context\.url\)/, 'cold-launch scene connection must capture URL contexts before the root mounts')
+assert.match(stemistApp, /didFinishLaunchingWithOptions[\s\S]{0,360}?routeCoordinator\.receive\(url,\s*source:\s*"appDelegate\.didFinishLaunching"\)/, 'the app delegate must retain launch URLs with an explicit source')
+assert.match(stemistApp, /application\([\s\S]{0,260}?open\s+url:\s*URL[\s\S]{0,260}?routeCoordinator\.receive\(url,\s*source:\s*"appDelegate\.openURL"\)/, 'the app delegate must retain warm URLs with an explicit source')
+assert.match(stemistApp, /configurationForConnecting[\s\S]*?connectionOptions\.urlContexts[\s\S]*?routeCoordinator\.receive\([\s\S]*?context\.url,[\s\S]*?source:\s*"appDelegate\.configurationForConnecting"/, 'cold-launch scene connection must capture URL contexts before the root mounts')
 assert.match(stemistApp, /configuration\.delegateClass\s*=\s*StemistSceneDelegate\.self/, 'cold-launch URL delivery must use an explicit scene delegate')
-assert.match(stemistApp, /final\s+class\s+StemistSceneDelegate[\s\S]{0,1400}?willConnectTo[\s\S]{0,500}?receive\(connectionOptions\.urlContexts\)/, 'the scene delegate must retain URL contexts during cold launch')
+assert.match(stemistApp, /final\s+class\s+StemistSceneDelegate[\s\S]{0,1400}?willConnectTo[\s\S]{0,500}?receive\(connectionOptions\.urlContexts,\s*source:\s*"scene\.willConnectTo"\)/, 'the scene delegate must retain URL contexts during cold launch')
 assert.match(stemistApp, /func\s+scene\(_\s+scene:\s*UIScene,\s*openURLContexts\s+URLContexts:\s*Set<UIOpenURLContext>\)/, 'the scene delegate must receive URLs delivered after scene connection')
+assert.match(stemistApp, /scene\(_\s*scene:\s*UIScene,\s*openURLContexts[\s\S]{0,360}?receive\(URLContexts,\s*source:\s*"scene\.openURLContexts"\)/, 'the scene delegate must retain URLs delivered after scene connection with an explicit source')
 assert.doesNotMatch(stemistApp, /routeCoordinator:\s*AppRouteCoordinator\?/, 'scene URL capture must not depend on a nil coordinator delegate')
 assert.match(stemistApp, /func\s+peekPendingURL\(\)\s*->\s*URL\?/, 'route coordinator must expose a non-destructive pending URL read')
 assert.match(stemistApp, /func\s+acknowledgePendingURL\(_\s+url:\s*URL\)/, 'route coordinator must acknowledge only the URL that was presented')
-assert.match(stemistApp, /func\s+receive\(_\s+url:\s*URL\)\s*\{[\s\S]{0,120}?guard\s+pendingURL\s*!=\s*url\s+else\s*\{\s*return\s*\}/, 'duplicate scene and app URL callbacks must be coalesced while a route is pending')
+assert.match(stemistApp, /func\s+receive\(_\s+url:\s*URL,\s*source:\s*String\s*=\s*"unknown"\)\s*\{[\s\S]{0,120}?guard\s+pendingURL\s*!=\s*url\s+else\s*\{\s*return\s*\}/, 'duplicate scene and app URL callbacks must be coalesced while a route is pending')
 assert.match(stemistApp, /lastAcknowledgedURL[\s\S]{0,220}?lastAcknowledgedAt/, 'duplicate callbacks arriving after acknowledgement must have a bounded suppression marker')
-assert.match(stemistApp, /receive\(_\s+url:\s*URL\)[\s\S]{0,420}?lastAcknowledgedURL\s*==\s*url[\s\S]{0,220}?lastAcknowledgedAt/, 'URL deduplication must also cover callbacks delivered after the first route was consumed')
+assert.match(stemistApp, /receive\(_\s+url:\s*URL,\s*source:\s*String[\s\S]{0,420}?lastAcknowledgedURL\s*==\s*url[\s\S]{0,220}?lastAcknowledgedAt/, 'URL deduplication must also cover callbacks delivered after the first route was consumed')
 assert.doesNotMatch(stemistApp, /func\s+takePendingURL\(\)/, 'route consumption must not clear a cold-launch URL before presentation succeeds')
 assert.match(contentView, /@ObservedObject\s+private\s+var\s+routeCoordinator:\s*AppRouteCoordinator/, 'the root shell must observe the app-owned route coordinator')
 assert.match(
@@ -119,13 +121,28 @@ assert.match(
 )
 assert.match(
   contentView,
-  /\.task\(id:\s*pendingExternalURLTaskID\)[\s\S]{0,1600}?consumePendingExternalURL\(\)/,
+  /\.task\(id:\s*pendingExternalURLTaskID\)[\s\S]{0,1600}?consumePendingExternalURLIfReady\(\)/,
   'cold-launch route consumption must react to the retained URL after the root is mounted'
 )
 assert.match(
   contentView,
   /\.onAppear\s*\{[\s\S]{0,500}?normalizeSelectedTab\(\)[\s\S]{0,500}?rootIsReady\s*=\s*true/,
   'cold-launch URL contexts received before SwiftUI observation must be consumed again when the root appears'
+)
+assert.match(
+  contentView,
+  /\.onChange\(of:\s*rootIsReady\)[\s\S]{0,320}?consumePendingExternalURLIfReady\(\)/,
+  'root readiness must actively retry a retained cold-launch URL'
+)
+assert.match(
+  contentView,
+  /\.onChange\(of:\s*routeCoordinator\.pendingURL\)[\s\S]{0,220}?consumePendingExternalURLIfReady\(\)/,
+  'new URL delivery must trigger the same idempotent pending-route consumer'
+)
+assert.match(
+  contentView,
+  /#if DEBUG[\s\S]{0,260}?routeCoordinator\.debugSnapshot[\s\S]{0,180}?webWorkspace\.debugSnapshot/,
+  'debug builds must expose both routing and workspace snapshots for lifecycle diagnosis'
 )
 assert.doesNotMatch(
   contentView,
@@ -210,14 +227,15 @@ assert.doesNotMatch(
   'the web module must not independently mutate root dismissal phase state'
 )
 assert.match(webModule, /let\s+requestLaunch:\s*\(WebRouteLaunch\)\s*->\s*Void/, 'the web module must expose an in-process route request to its parent')
-assert.match(webModule, /allowsAccountEntry[\s\S]{0,900}?requestLaunch\(WebRouteLaunch\(route:\s*\.ieltsAccount\)\)[\s\S]{0,900}?accessibilityIdentifier\("web-open-account"\)/, 'the QA-only account control must request an in-process account route')
-assert.match(webModule, /private\s+var\s+workspaceHeader:\s*some\s+View/, 'the workspace must expose a stable native header outside NavigationStack toolbar timing')
-assert.match(webModule, /workspaceHeader[\s\S]{0,1200}?accessibilityIdentifier\("web-close"\)/, 'the stable workspace header must own the close control')
+assert.match(contentView, /WebWorkspaceChrome[\s\S]{0,1400}?allowsAccountEntry[\s\S]{0,900}?requestLaunch\(WebRouteLaunch\(route:\s*\.ieltsAccount\)\)[\s\S]{0,900}?accessibilityIdentifier\("web-open-account"\)/, 'the QA-only account control must request an in-process account route')
+assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome:\s*View/, 'the native workspace chrome must live in the root host')
+assert.match(contentView, /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,1800}?accessibilityIdentifier\("web-close"\)/, 'the root workspace chrome must own the close control')
 assert.match(
-  webModule,
-  /\.safeAreaInset\(edge:\s*\.top[\s\S]{0,420}?workspaceHeader/,
-  'the workspace header must occupy an explicit top safe-area inset above the embedded web view'
+  contentView,
+  /WebWorkspaceChrome\([\s\S]{0,1800}?WebModuleView\(/,
+  'the host must place native workspace chrome above the embedded web module'
 )
+assert.doesNotMatch(webModule, /private\s+var\s+workspaceHeader:/, 'the web module must not own host-level dismissal chrome')
 assert.doesNotMatch(webModule, /\.toolbar\b/, 'workspace actions must not depend on a delayed NavigationStack toolbar')
 assert.match(
   contentView,
@@ -537,8 +555,18 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /private func openAndCloseRoute[\s\S]*?waitUntilHittable\(routeButton[\s\S]*?routeButton\.tap\(\)/,
+  /private func openAndCloseRoute[\s\S]*?waitUntilHittable(?:ByScrolling)?\(routeButton[\s\S]*?routeButton\.tap\(\)/,
   'route tests must not tap a control while a prior presentation is still dismissing'
+)
+assert.match(
+  shellUITests,
+  /private func openAndCloseRoute[\s\S]{0,700}?waitUntilHittableByScrolling\(routeButton\)/,
+  'route tests must scroll off-screen rows into view before asserting iPad hittability'
+)
+assert.match(
+  shellUITests,
+  /Expected[\s\S]{0,80}buttonIdentifier[\s\S]{0,220}?app\.debugDescription/,
+  'route control failures must retain the accessibility hierarchy for diagnosis'
 )
 assert.match(
   shellUITests,
@@ -731,9 +759,9 @@ assert.match(
 assert.match(webModule, /stopForDismissal/, 'leaving a web module must stop active media and loading')
 assert.match(webModule, /func\s+pauseForHiding\(\)[\s\S]{0,700}?evaluateJavaScript\(/, 'closing a workspace must pause active media')
 assert.match(
-  webModule,
-  /Button\s*\{\s*webViewStore\.pauseForHiding\(\)[\s\S]{0,260}?dismissWorkspace\(\)/,
-  'the close control must pause media before dismissing the full-screen workspace'
+  contentView,
+  /private\s+struct\s+WebWorkspaceChrome[\s\S]{0,1800}?dismissWorkspace\(\)/,
+  'the root close control must dismiss the workspace without depending on WebView toolbar timing'
 )
 assert.match(
   webModule,

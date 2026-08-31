@@ -76,6 +76,54 @@ final class WebWorkspaceCoordinator: ObservableObject {
 }
 
 @MainActor
+private struct WebWorkspaceChrome: View {
+    let route: WebRoute
+    let allowsAccountEntry: Bool
+    let requestLaunch: (WebRouteLaunch) -> Void
+    let dismissWorkspace: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: route.symbol)
+                .foregroundStyle(route.tint)
+                .accessibilityHidden(true)
+            Text(route.title)
+                .font(.headline)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+
+            if allowsAccountEntry, route != .ieltsAccount {
+                Button {
+                    requestLaunch(WebRouteLaunch(route: .ieltsAccount))
+                } label: {
+                    Image(systemName: "person.crop.circle")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Open account")
+                .accessibilityIdentifier("web-open-account")
+                .help("Open account")
+            }
+
+            Button {
+                dismissWorkspace()
+            } label: {
+                Image(systemName: "xmark")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Close \(route.title)")
+            .accessibilityIdentifier("web-close")
+            .help("Close")
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+}
+
+@MainActor
 private struct WebWorkspaceHost: View {
     let launch: WebRouteLaunch
     let presentationID: UUID
@@ -86,12 +134,22 @@ private struct WebWorkspaceHost: View {
     let onDisappear: (UUID) -> Void
 
     var body: some View {
-        WebModuleView(
-            launch: launch,
-            requestLaunch: requestLaunch,
-            dismissWorkspace: dismissWorkspace
-        )
-        .id(launch.id)
+        VStack(spacing: 0) {
+            WebWorkspaceChrome(
+                route: launch.route,
+                allowsAccountEntry: configuration.showsAccountEntry,
+                requestLaunch: requestLaunch,
+                dismissWorkspace: dismissWorkspace
+            )
+
+            WebModuleView(
+                launch: launch,
+                requestLaunch: requestLaunch,
+                dismissWorkspace: dismissWorkspace
+            )
+            .id(launch.id)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
         .onAppear { onMount(launch) }
         .onDisappear { onDisappear(presentationID) }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
@@ -128,7 +186,7 @@ struct ContentView: View {
         webWorkspace.present(launch)
     }
 
-    private func consumePendingExternalURL() {
+    private func consumePendingExternalURLIfReady() {
         guard rootIsReady else { return }
         guard let url = routeCoordinator.peekPendingURL() else { return }
         guard let launch = WebRouteLaunch(
@@ -249,7 +307,6 @@ struct ContentView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(StemistTheme.background)
-                .ignoresSafeArea()
                 .zIndex(10)
                 .accessibilityAddTraits(.isModal)
             }
@@ -263,12 +320,19 @@ struct ContentView: View {
         .onChange(of: selectedTab) { _, _ in
             normalizeSelectedTab()
         }
+        .onChange(of: rootIsReady) { _, isReady in
+            guard isReady else { return }
+            consumePendingExternalURLIfReady()
+        }
+        .onChange(of: routeCoordinator.pendingURL) { _, _ in
+            consumePendingExternalURLIfReady()
+        }
         .task(id: pendingExternalURLTaskID) {
             guard rootIsReady, routeCoordinator.pendingURL != nil else { return }
             await Task.yield()
             for _ in 0..<20 {
                 guard !Task.isCancelled else { return }
-                consumePendingExternalURL()
+                consumePendingExternalURLIfReady()
                 guard routeCoordinator.pendingURL != nil else { return }
                 do {
                     try await Task.sleep(nanoseconds: 100_000_000)
@@ -278,7 +342,7 @@ struct ContentView: View {
             }
         }
 #if DEBUG
-        .accessibilityValue(webWorkspace.debugSnapshot)
+        .accessibilityValue("\(routeCoordinator.debugSnapshot) | \(webWorkspace.debugSnapshot)")
 #endif
         .accessibilityIdentifier("stemist-root")
     }

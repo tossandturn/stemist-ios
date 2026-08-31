@@ -2,15 +2,40 @@ import Foundation
 import SwiftUI
 import UIKit
 
+#if DEBUG
+import os
+#endif
+
 @MainActor
 final class AppRouteCoordinator: ObservableObject {
+    static let shared = AppRouteCoordinator()
+
     @Published private(set) var pendingURL: URL?
+
+    #if DEBUG
+    @Published private(set) var debugSnapshot = "0 init"
+    private var debugSequence = 0
+    private let debugLog = Logger(subsystem: "com.ieltsist.stemist", category: "routing")
+    #endif
 
     private var lastAcknowledgedURL: URL?
     private var lastAcknowledgedAt: Date?
     private static let duplicateSuppressionInterval: TimeInterval = 2
 
-    func receive(_ url: URL) {
+    #if DEBUG
+    private func record(_ event: String, url: URL? = nil) {
+        debugSequence += 1
+        let location = url.map { "\($0.scheme ?? "")://\($0.host ?? "")\($0.path)" } ?? "-"
+        debugSnapshot = "\(debugSequence) \(event) \(location) pending=\(pendingURL != nil)"
+        debugLog.debug("\(self.debugSnapshot, privacy: .public)")
+        print("[StemistRouting] \(debugSnapshot)")
+    }
+    #else
+    private func record(_ event: String, url: URL? = nil) {}
+    #endif
+
+    func receive(_ url: URL, source: String = "unknown") {
+        record("receive[\(source)]", url: url)
         guard pendingURL != url else { return }
 
         if let lastAcknowledgedURL,
@@ -22,6 +47,7 @@ final class AppRouteCoordinator: ObservableObject {
         }
 
         pendingURL = url
+        record("pending[\(source)]", url: url)
     }
 
     func peekPendingURL() -> URL? {
@@ -33,19 +59,30 @@ final class AppRouteCoordinator: ObservableObject {
         pendingURL = nil
         lastAcknowledgedURL = url
         lastAcknowledgedAt = Date()
+        record("acknowledged", url: url)
     }
 }
 
 @MainActor
 final class StemistAppDelegate: NSObject, UIApplicationDelegate {
-    let routeCoordinator = AppRouteCoordinator()
+    let routeCoordinator = AppRouteCoordinator.shared
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        if let url = launchOptions?[.url] as? URL {
+            routeCoordinator.receive(url, source: "appDelegate.didFinishLaunching")
+        }
+        return true
+    }
 
     func application(
         _ application: UIApplication,
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        routeCoordinator.receive(url)
+        routeCoordinator.receive(url, source: "appDelegate.openURL")
         return true
     }
 
@@ -55,7 +92,10 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
         options connectionOptions: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
         connectionOptions.urlContexts.forEach { context in
-            routeCoordinator.receive(context.url)
+            routeCoordinator.receive(
+                context.url,
+                source: "appDelegate.configurationForConnecting"
+            )
         }
 
         let configuration = UISceneConfiguration(
@@ -70,10 +110,7 @@ final class StemistAppDelegate: NSObject, UIApplicationDelegate {
 @MainActor
 final class StemistSceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var routeCoordinator: AppRouteCoordinator {
-        guard let appDelegate = UIApplication.shared.delegate as? StemistAppDelegate else {
-            preconditionFailure("StemistSceneDelegate requires StemistAppDelegate")
-        }
-        return appDelegate.routeCoordinator
+        AppRouteCoordinator.shared
     }
 
     func scene(
@@ -81,16 +118,16 @@ final class StemistSceneDelegate: UIResponder, UIWindowSceneDelegate {
         willConnectTo session: UISceneSession,
         options connectionOptions: UIScene.ConnectionOptions
     ) {
-        receive(connectionOptions.urlContexts)
+        receive(connectionOptions.urlContexts, source: "scene.willConnectTo")
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        receive(URLContexts)
+        receive(URLContexts, source: "scene.openURLContexts")
     }
 
-    private func receive(_ contexts: Set<UIOpenURLContext>) {
+    private func receive(_ contexts: Set<UIOpenURLContext>, source: String) {
         contexts.forEach { context in
-            routeCoordinator.receive(context.url)
+            routeCoordinator.receive(context.url, source: source)
         }
     }
 }
@@ -103,7 +140,7 @@ struct StemistApp: App {
         WindowGroup {
             ContentView(routeCoordinator: appDelegate.routeCoordinator)
                 .onOpenURL { url in
-                    appDelegate.routeCoordinator.receive(url)
+                    appDelegate.routeCoordinator.receive(url, source: "swiftui.onOpenURL")
                 }
         }
     }

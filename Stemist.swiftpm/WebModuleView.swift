@@ -304,47 +304,6 @@ struct WebModuleView: View {
         loadWatchdogToken = UUID()
     }
 
-    private var workspaceHeader: some View {
-        HStack(spacing: 12) {
-            Image(systemName: route.symbol)
-                .foregroundStyle(route.tint)
-                .accessibilityHidden(true)
-            Text(route.title)
-                .font(.headline)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-
-            if allowsAccountEntry, route != .ieltsAccount {
-                Button {
-                    requestLaunch(WebRouteLaunch(route: .ieltsAccount))
-                } label: {
-                    Image(systemName: "person.crop.circle")
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("Open account")
-                .accessibilityIdentifier("web-open-account")
-                .help("Open account")
-            }
-
-            Button {
-                webViewStore.pauseForHiding()
-                dismissWorkspace()
-            } label: {
-                Image(systemName: "xmark")
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Close \(route.title)")
-            .accessibilityIdentifier("web-close")
-            .help("Close")
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 56)
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -384,9 +343,6 @@ struct WebModuleView: View {
                         .padding(.vertical, 14)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                workspaceHeader
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 18) {
