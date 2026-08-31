@@ -377,14 +377,21 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func safariAddressField(in safari: XCUIApplication) -> XCUIElement {
+        let focusedSearchField = safari.textFields.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "SearchFieldItemView")
+        ).firstMatch
+        if focusedSearchField.exists {
+            return focusedSearchField
+        }
+
         let labels = [
+            "Search or enter website name",
             "Address",
             "URL",
-            "Search or enter website name",
             "Tab Bar",
         ]
         for label in labels {
-            let field = safari.textFields[label]
+            let field = safari.textFields[label].firstMatch
             if field.exists {
                 return field
             }

@@ -570,6 +570,11 @@ assert.match(
   /addressField\.tap\(\)[\s\S]{0,520}?safari\.typeText\(url\.absoluteString\)/,
   'Safari custom-scheme input must type through the focused application instead of re-resolving a duplicated iPad address-field element'
 )
+assert.match(
+  shellUITests,
+  /SearchFieldItemView[\s\S]{0,260}?\.firstMatch/,
+  'Safari address input must prefer the stable focused search-field identifier over duplicate accessibility labels'
+)
 assert.doesNotMatch(
   shellUITests,
   /addressField\.typeText\(/,
