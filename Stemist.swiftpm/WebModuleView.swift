@@ -346,11 +346,8 @@ struct WebModuleView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            workspaceHeader
-
-            NavigationStack {
-                ZStack {
+        NavigationStack {
+            ZStack {
                 EmbeddedWebView(
                     url: launchURL,
                     reloadToken: reloadToken,
@@ -387,8 +384,11 @@ struct WebModuleView: View {
                         .padding(.vertical, 14)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                workspaceHeader
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 18) {
                     Button {
                         webViewStore.goBack()
@@ -433,12 +433,12 @@ struct WebModuleView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 .background(.bar)
-                }
-                .sheet(isPresented: $showsSafari) {
+            }
+            .sheet(isPresented: $showsSafari) {
                 SafariView(url: currentURL ?? launchURL)
                     .ignoresSafeArea()
-                }
-                .task(id: loadWatchdogToken) {
+            }
+            .task(id: loadWatchdogToken) {
                 do {
                     try await Task.sleep(nanoseconds: WebModuleTiming.loadTimeoutNanoseconds)
                     guard !Task.isCancelled, isLoading else { return }
@@ -448,13 +448,12 @@ struct WebModuleView: View {
                 } catch {
                     // Cancellation is expected when the page finishes or the view is dismissed.
                 }
-                }
-                .onDisappear {
-                    webViewStore.stopForDismissal()
-                }
             }
-            .accessibilityIdentifier("web-module-\(route.id)")
+            .onDisappear {
+                webViewStore.stopForDismissal()
+            }
         }
+        .accessibilityIdentifier("web-module-\(route.id)")
         .background(StemistTheme.background)
     }
 }

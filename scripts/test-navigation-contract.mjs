@@ -213,6 +213,11 @@ assert.match(webModule, /let\s+requestLaunch:\s*\(WebRouteLaunch\)\s*->\s*Void/,
 assert.match(webModule, /allowsAccountEntry[\s\S]{0,900}?requestLaunch\(WebRouteLaunch\(route:\s*\.ieltsAccount\)\)[\s\S]{0,900}?accessibilityIdentifier\("web-open-account"\)/, 'the QA-only account control must request an in-process account route')
 assert.match(webModule, /private\s+var\s+workspaceHeader:\s*some\s+View/, 'the workspace must expose a stable native header outside NavigationStack toolbar timing')
 assert.match(webModule, /workspaceHeader[\s\S]{0,1200}?accessibilityIdentifier\("web-close"\)/, 'the stable workspace header must own the close control')
+assert.match(
+  webModule,
+  /\.safeAreaInset\(edge:\s*\.top[\s\S]{0,420}?workspaceHeader/,
+  'the workspace header must occupy an explicit top safe-area inset above the embedded web view'
+)
 assert.doesNotMatch(webModule, /\.toolbar\b/, 'workspace actions must not depend on a delayed NavigationStack toolbar')
 assert.match(
   contentView,
