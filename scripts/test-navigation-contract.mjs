@@ -582,6 +582,16 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
+  /let\s+workspaceHost\s*=\s*app\.otherElements\["web-workspace-host"\][\s\S]{0,1800}?workspaceHost\.waitForNonExistence\(timeout:\s*3\)[\s\S]{0,1800}?identifier IN %@ AND hittable == true[\s\S]{0,1000}?waitUntilHittable\(restoredTab\)/,
+  'workspace dismissal must verify that the native host is gone and a root tab is interactive again'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /private\s+func\s+closeWebModule[\s\S]{0,2200}?module\.waitForNonExistence/,
+  'workspace dismissal must not use a retained WKWebView accessibility node as the authoritative close signal'
+)
+assert.match(
+  shellUITests,
   /addressField\.tap\(\)[\s\S]{0,520}?safari\.typeText\(url\.absoluteString\)/,
   'Safari custom-scheme input must type through the focused application instead of re-resolving a duplicated iPad address-field element'
 )
@@ -663,11 +673,6 @@ assert.match(
   shellUITests,
   /Expected[\s\S]{0,80}buttonIdentifier[\s\S]{0,220}?app\.debugDescription/,
   'route control failures must retain the accessibility hierarchy for diagnosis'
-)
-assert.match(
-  shellUITests,
-  /module\.waitForNonExistence\(timeout:/,
-  'route tests must wait for full-screen modules to finish dismissing'
 )
 assert.doesNotMatch(
   shellUITests,

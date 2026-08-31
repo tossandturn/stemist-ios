@@ -324,6 +324,13 @@ final class StemistShellUITests: XCTestCase {
     private func closeWebModule(_ module: XCUIElement, named moduleIdentifier: String) {
         guard module.exists else { return }
 
+        let workspaceHost = app.otherElements["web-workspace-host"]
+        XCTAssertTrue(
+            workspaceHost.waitForExistence(timeout: 3),
+            "Expected \(moduleIdentifier) to mount its native workspace host."
+                + "\n\nAccessibility hierarchy while the module is open:\n\(app.debugDescription)"
+        )
+
         let workspaceChrome = app.otherElements["web-workspace-chrome"]
         XCTAssertTrue(
             workspaceChrome.waitForExistence(timeout: 3),
@@ -344,7 +351,26 @@ final class StemistShellUITests: XCTestCase {
         guard !closeFrame.isEmpty else { return }
 
         closeButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(module.waitForNonExistence(timeout: 3), "Expected \(moduleIdentifier) to close")
+
+        guard workspaceHost.waitForNonExistence(timeout: 3) else {
+            let root = app.otherElements["stemist-root"]
+            XCTFail(
+                "Expected \(moduleIdentifier)'s native workspace host to close."
+                    + "\n\nRoot workspace diagnostics: \(String(describing: root.value))"
+                    + "\n\nAccessibility hierarchy after tapping close:\n\(app.debugDescription)"
+            )
+            return
+        }
+
+        let tabIdentifiers = ["tab-today", "tab-ielts", "tab-stem", "tab-notebook", "tab-profile"]
+        let restoredTab = app.buttons.matching(
+            NSPredicate(format: "identifier IN %@ AND hittable == true", tabIdentifiers)
+        ).firstMatch
+        XCTAssertTrue(
+            waitUntilHittable(restoredTab),
+            "Expected the native product shell to become interactive after closing \(moduleIdentifier)."
+                + "\n\nAccessibility hierarchy after closing the workspace:\n\(app.debugDescription)"
+        )
     }
 
     private func attachScreenshot(named name: String) {
