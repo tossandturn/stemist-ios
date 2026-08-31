@@ -324,7 +324,8 @@ final class StemistShellUITests: XCTestCase {
     private func closeWebModule(_ module: XCUIElement, named moduleIdentifier: String) {
         guard module.exists else { return }
 
-        let closeButton = app.buttons["web-close"]
+        let workspaceChrome = app.otherElements["web-workspace-chrome"]
+        let closeButton = workspaceChrome.buttons["web-close"]
         XCTAssertTrue(
             waitUntilHittable(closeButton),
             "Expected \(moduleIdentifier) to expose a close control."
@@ -402,30 +403,21 @@ final class StemistShellUITests: XCTestCase {
     private func acceptOpenInStemistPromptIfPresent(in safari: XCUIApplication, timeout: TimeInterval = 8) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let buttonLabels = ["Open", "Allow", "Continue"]
+        let promptPredicate = NSPredicate(format: "label IN %@", buttonLabels)
+        let springboardButton = springboard.buttons.matching(promptPredicate).firstMatch
+        let safariButton = safari.buttons.matching(promptPredicate).firstMatch
         let deadline = Date().addingTimeInterval(timeout)
 
         while Date() < deadline {
-            for label in buttonLabels {
-                let springboardButton = springboard.buttons[label]
-                if springboardButton.exists && springboardButton.isHittable {
-                    springboardButton.tap()
-                    return
-                }
-
-                let safariButton = safari.buttons[label]
-                if safariButton.exists && safariButton.isHittable {
-                    safariButton.tap()
-                    return
-                }
-
-                let appButton = app.buttons[label]
-                if appButton.exists && appButton.isHittable {
-                    appButton.tap()
+            for promptButton in [springboardButton, safariButton] {
+                if promptButton.exists && promptButton.isHittable {
+                    promptButton.tap()
                     return
                 }
             }
 
-            if app.otherElements["stemist-root"].exists {
+            if app.state == .runningForeground,
+               app.otherElements["stemist-root"].exists {
                 return
             }
 

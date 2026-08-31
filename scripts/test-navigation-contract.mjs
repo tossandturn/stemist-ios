@@ -567,6 +567,11 @@ assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell 
 assert.match(shellUITests, /acceptOpenInStemistPromptIfPresent/, 'the custom-scheme regression must handle the iOS Open confirmation prompt')
 assert.match(
   shellUITests,
+  /let\s+workspaceChrome\s*=\s*app\.otherElements\["web-workspace-chrome"\][\s\S]{0,260}?workspaceChrome\.buttons\["web-close"\]/,
+  'workspace dismissal tests must scope the native close control above the web view hierarchy'
+)
+assert.match(
+  shellUITests,
   /addressField\.tap\(\)[\s\S]{0,520}?safari\.typeText\(url\.absoluteString\)/,
   'Safari custom-scheme input must type through the focused application instead of re-resolving a duplicated iPad address-field element'
 )
@@ -579,6 +584,16 @@ assert.doesNotMatch(
   shellUITests,
   /addressField\.typeText\(/,
   'iPad Safari can expose two Address text fields after focus, so typing through the original query is ambiguous'
+)
+assert.match(
+  shellUITests,
+  /let\s+promptPredicate\s*=\s*NSPredicate\(format:\s*"label IN %@",\s*buttonLabels\)[\s\S]{0,360}?springboard\.buttons\.matching\(promptPredicate\)\.firstMatch[\s\S]{0,360}?safari\.buttons\.matching\(promptPredicate\)\.firstMatch/,
+  'custom-scheme prompt polling must query every accepted label per host so one slow accessibility pass cannot exhaust the deadline'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /for\s+label\s+in\s+buttonLabels/,
+  'custom-scheme prompt polling must not exhaust its deadline with a label-major accessibility loop'
 )
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
