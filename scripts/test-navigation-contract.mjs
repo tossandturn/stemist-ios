@@ -560,6 +560,16 @@ assert.match(
 assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the custom-scheme regression must open through Safari instead of the unreliable XCUIApplication.open URL shortcut')
 assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell modes must exercise the account deep link through the real custom-scheme path')
 assert.match(shellUITests, /acceptOpenInStemistPromptIfPresent/, 'the custom-scheme regression must handle the iOS Open confirmation prompt')
+assert.match(
+  shellUITests,
+  /addressField\.tap\(\)[\s\S]{0,520}?safari\.typeText\(url\.absoluteString\)/,
+  'Safari custom-scheme input must type through the focused application instead of re-resolving a duplicated iPad address-field element'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /addressField\.typeText\(/,
+  'iPad Safari can expose two Address text fields after focus, so typing through the original query is ambiguous'
+)
 assert.match(shellUITests, /web-module-ielts-account/, 'the shell suite must assert account module visibility by mode')
 assert.match(shellUITests, /openAndCloseRoute/, 'the shell suite must assert that launched web modules can be closed')
 assert.match(

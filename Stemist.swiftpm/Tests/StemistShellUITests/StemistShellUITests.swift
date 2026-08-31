@@ -354,7 +354,10 @@ final class StemistShellUITests: XCTestCase {
         guard addressField.exists else { return }
 
         addressField.tap()
-        addressField.typeText(url.absoluteString)
+        // Safari exposes duplicate Address text fields after focus on iPadOS.
+        // Send text to the focused application instead of re-resolving the
+        // now-ambiguous address-field query.
+        safari.typeText(url.absoluteString)
 
         let goButtons = [
             safari.keyboards.buttons["go"],
@@ -369,7 +372,7 @@ final class StemistShellUITests: XCTestCase {
             }
         }
 
-        addressField.typeText("\n")
+        safari.typeText("\n")
         acceptOpenInStemistPromptIfPresent(in: safari)
     }
 
