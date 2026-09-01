@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import AVFoundation
 import WebKit
 import SafariServices
 import UniformTypeIdentifiers
@@ -214,6 +215,114 @@ private enum AccountEntryVisibilityScript {
         };
         document.addEventListener('DOMContentLoaded', start, { once: true });
         start();
+    })();
+    """
+}
+
+private enum PenInputBehaviorScript {
+    static let install = """
+    (() => {
+        const host = window.location.hostname.toLowerCase();
+        if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
+        const drawingSelector = [
+            'canvas',
+            '[data-drawing-surface]',
+            '[data-handwriting-canvas]',
+            '[data-answer-canvas]',
+            '[data-input-mode="handwrite"]',
+            '.handwriting-pad__canvas',
+            '.pdf-ink-layer',
+            '.drawing-canvas',
+            '.handwriting-canvas',
+            '.signature-pad'
+        ].join(',');
+        const styleId = 'stemist-pen-input-behavior';
+        const drawingTarget = (target) => {
+            if (!(target instanceof Element)) return null;
+            return target.closest(drawingSelector);
+        };
+        const installStyle = () => {
+            if (document.getElementById(styleId)) return;
+            const root = document.head || document.documentElement;
+            if (!root) return;
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `${drawingSelector} {\\n`
+                + '  -webkit-user-select: none !important;\\n'
+                + '  user-select: none !important;\\n'
+                + '  -webkit-touch-callout: none !important;\\n'
+                + '  touch-action: none !important;\\n'
+                + '}';
+            root.appendChild(style);
+        };
+        const blockSelection = (event) => {
+            if (drawingTarget(event.target)) event.preventDefault();
+        };
+        const capturePen = (event) => {
+            if (event.pointerType !== 'pen') return;
+            const target = drawingTarget(event.target);
+            if (!target || typeof target.setPointerCapture !== 'function') return;
+            try { target.setPointerCapture(event.pointerId); } catch (_) {}
+        };
+
+        const observeDocument = () => {
+            const root = document.documentElement;
+            if (!root) return;
+            installStyle();
+            new MutationObserver(installStyle).observe(root, {
+                childList: true,
+                subtree: true
+            });
+        };
+
+        installStyle();
+        document.addEventListener('selectstart', blockSelection, true);
+        document.addEventListener('contextmenu', blockSelection, true);
+        document.addEventListener('dragstart', blockSelection, true);
+        document.addEventListener('pointerdown', capturePen, true);
+        if (document.documentElement) {
+            observeDocument();
+        } else {
+            document.addEventListener('DOMContentLoaded', observeDocument, { once: true });
+        }
+    })();
+    """
+}
+
+private enum CameraCaptureIntentScript {
+    static let handlerName = "stemistCameraCapture"
+
+    static let observe = """
+    (() => {
+        const host = window.location.hostname.toLowerCase();
+        if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
+        const handler = window.webkit?.messageHandlers?.stemistCameraCapture;
+        if (!handler) return;
+        const cameraLabel = /^(take photo|camera|拍照|使用摄像头|打开摄像头)$/i;
+        const textOf = (element) => (element?.textContent || '')
+            .replace(/\\s+/g, ' ')
+            .trim();
+        const isCameraInput = (element) => element instanceof HTMLInputElement
+            && element.type === 'file'
+            && element.hasAttribute('capture');
+        const isCameraControl = (element) => {
+            if (!(element instanceof Element)) return false;
+            if (isCameraInput(element)) return true;
+            if (!element.matches('button, [role="button"], label')) return false;
+            return cameraLabel.test(textOf(element));
+        };
+        document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element)) return;
+            const candidates = [
+                event.target.closest('input[type="file"]'),
+                event.target.closest('button, [role="button"]'),
+                event.target.closest('label')
+            ].filter(Boolean);
+            if (!candidates.some(isCameraControl)) return;
+            try {
+                handler.postMessage({ kind: 'camera' });
+            } catch (_) {}
+        }, true);
     })();
     """
 }
@@ -436,6 +545,21 @@ struct EmbeddedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.add(context.coordinator, name: CameraCaptureIntentScript.handlerName)
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: PenInputBehaviorScript.install,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: CameraCaptureIntentScript.observe,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
         if !allowsAccountEntry {
             configuration.userContentController.addUserScript(
                 WKUserScript(
@@ -486,18 +610,36 @@ struct EmbeddedWebView: UIViewRepresentable {
         Coordinator(parent: self, store: store)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate,
+        UIImagePickerControllerDelegate, UINavigationControllerDelegate, WKScriptMessageHandler {
         var parent: EmbeddedWebView
         var store: WebViewStore
         var requestedURL: URL?
         var lastReloadToken: UUID?
         var fileUploadCompletion: (([URL]?) -> Void)?
         var hasRetriedAfterTermination = false
+        private var cameraCaptureIntentDeadline: Date?
 
         init(parent: EmbeddedWebView, store: WebViewStore) {
             self.parent = parent
             self.store = store
             super.init()
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == CameraCaptureIntentScript.handlerName,
+                  let body = message.body as? [String: Any],
+                  body["kind"] as? String == "camera" else {
+                return
+            }
+
+            // The message arrives immediately before WebKit asks the delegate
+            // to present the file panel for the same input. Keep the window
+            // short so a later Upload photo action cannot inherit camera mode.
+            cameraCaptureIntentDeadline = Date().addingTimeInterval(2)
         }
 
         private func restartLoadWatchdog() {
@@ -692,6 +834,11 @@ struct EmbeddedWebView: UIViewRepresentable {
             fileUploadCompletion?(nil)
             fileUploadCompletion = completionHandler
 
+            if consumeCameraCaptureIntent() {
+                presentCameraCapture(in: webView)
+                return
+            }
+
             let picker = UIDocumentPickerViewController(
                 forOpeningContentTypes: [
                     UTType.item,
@@ -732,6 +879,112 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             finishFileUpload(with: nil)
+        }
+
+        private func consumeCameraCaptureIntent() -> Bool {
+            defer { cameraCaptureIntentDeadline = nil }
+            guard let deadline = cameraCaptureIntentDeadline else { return false }
+            return deadline > Date()
+        }
+
+        private func presentCameraCapture(in webView: WKWebView) {
+            guard let presenter = presentingViewController(for: webView),
+                  !(presenter is UIAlertController),
+                  !(presenter is UIDocumentPickerViewController),
+                  !(presenter is UIImagePickerController) else {
+                finishFileUpload(with: nil)
+                return
+            }
+
+            guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+                presentCameraUnavailable(on: presenter)
+                return
+            }
+
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                presentCameraPicker(on: presenter)
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .video) { [weak self, weak presenter] granted in
+                    DispatchQueue.main.async {
+                        guard let self, let presenter else { return }
+                        if granted {
+                            self.presentCameraPicker(on: presenter)
+                        } else {
+                            self.presentCameraPermissionDenied(on: presenter)
+                        }
+                    }
+                }
+            case .denied, .restricted:
+                presentCameraPermissionDenied(on: presenter)
+            @unknown default:
+                presentCameraPermissionDenied(on: presenter)
+            }
+        }
+
+        private func presentCameraPicker(on presenter: UIViewController) {
+            let picker = UIImagePickerController()
+            picker.sourceType = .camera
+            picker.cameraCaptureMode = .photo
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+        }
+
+        private func presentCameraUnavailable(on presenter: UIViewController) {
+            let alert = UIAlertController(
+                title: "Camera unavailable",
+                message: "This device cannot open a camera right now. Choose Upload photo instead.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+            })
+            presenter.present(alert, animated: true)
+        }
+
+        private func presentCameraPermissionDenied(on presenter: UIViewController) {
+            let alert = UIAlertController(
+                title: "Camera access is off",
+                message: "Allow camera access in Settings, then try Take photo again.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+            })
+            alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+                guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(settingsURL, options: [:])
+            })
+            presenter.present(alert, animated: true)
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = info[.originalImage] as? UIImage
+            let fileURL = image.flatMap { image -> URL? in
+                guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("stemist-camera-\(UUID().uuidString).jpg")
+                do {
+                    try data.write(to: url, options: .atomic)
+                    return url
+                } catch {
+                    return nil
+                }
+            }
+
+            picker.dismiss(animated: true) { [weak self] in
+                self?.finishFileUpload(with: fileURL.map { [$0] })
+            }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true) { [weak self] in
+                self?.finishFileUpload(with: nil)
+            }
         }
 
         func webView(
