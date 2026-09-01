@@ -131,6 +131,11 @@ assert.match(
 )
 assert.match(
   contentView,
+  /WebWorkspaceHost[\s\S]{0,1800}?onChange\(of:\s*launch\.id\)[\s\S]{0,260}?onMount\(launch\)/,
+  'a resident workspace must acknowledge a pending deep link when an in-place route replacement changes its launch'
+)
+assert.match(
+  contentView,
   /guard\s+let\s+url\s*=\s*routeCoordinator\.peekPendingURL\(\)[\s\S]{0,260}?guard\s+let\s+launch\s*=\s*WebRouteLaunch\([\s\S]{0,320}?else\s*\{[\s\S]{0,180}?acknowledgePendingURL\(url\)[\s\S]{0,80}?return/,
   'a blocked or malformed deep link must be acknowledged after rejection instead of remaining pending forever'
 )

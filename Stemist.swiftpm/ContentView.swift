@@ -159,6 +159,10 @@ private struct WebWorkspaceHost: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { onMount(launch) }
+        // The resident host is intentionally not recreated for an in-process
+        // route replacement. A pending custom URL therefore needs the same
+        // post-mount acknowledgement when only the typed launch changes.
+        .onChange(of: launch.id) { _, _ in onMount(launch) }
         .onDisappear { onDisappear(presentationID) }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .accessibilityElement(children: .contain)
