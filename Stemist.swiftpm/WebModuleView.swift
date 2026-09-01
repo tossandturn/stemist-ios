@@ -595,6 +595,10 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.keyboardDismissMode = .interactive
         webView.scrollView.panGestureRecognizer.cancelsTouchesInView = false
+        // Keep text interaction stable. Toggling this preference from a
+        // JavaScript pointer callback causes a measurable Pencil hitch in
+        // WKWebView; drawing surfaces opt out of selection themselves.
+        configuration.preferences.isTextInteractionEnabled = true
         configureInputGestures(for: webView)
         store.webView = webView
         webView.accessibilityIdentifier = accessibilityIdentifier
@@ -646,9 +650,12 @@ struct EmbeddedWebView: UIViewRepresentable {
             didReceive message: WKScriptMessage
         ) {
             if message.name == PenInputBehaviorScript.handlerName {
-                let body = message.body as? [String: Any]
-                let active = body?["active"] as? Bool ?? false
-                store.webView?.configuration.preferences.isTextInteractionEnabled = !active
+                // Do not mutate WKPreferences while a Pencil stroke is in
+                // flight. WebKit applies that preference asynchronously and
+                // can interrupt the same pointer stream that is painting the
+                // answer. Selection/callout suppression is handled by the
+                // scoped CSS, pointer cancellation and context-menu delegate,
+                // so the preference remains stable for the document lifetime.
                 return
             }
 

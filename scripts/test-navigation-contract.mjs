@@ -638,7 +638,7 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /let\s+lifecycleProbe\s*=\s*app\.buttons\["tab-today"\]/,
+  /private\s+func\s+todayLifecycleProbe\(\)\s*->\s*XCUIElement[\s\S]{0,420}?identifier\s*==\s*%@/,
   'custom-scheme handoff tests must read the stable Today-tab lifecycle token'
 )
 assert.doesNotMatch(
@@ -866,7 +866,8 @@ assert.match(
 assert.match(webModule, /requestMediaCapturePermissionFor/, 'speaking needs an explicit media permission policy')
 assert.match(webModule, /PenInputBehaviorScript/, 'iPad pen input needs a scoped selection-protection script')
 assert.match(webModule, /static let handlerName = "stemistPenInput"/, 'pen activity must have a native WebView message channel')
-assert.match(webModule, /isTextInteractionEnabled\s*=\s*!active/, 'WebKit text interaction must be disabled only during an active Pencil stroke')
+assert.match(webModule, /isTextInteractionEnabled\s*=\s*true/, 'WebKit text interaction must remain stable while drawing CSS and the delegate suppress selection')
+assert.doesNotMatch(webModule, /isTextInteractionEnabled\s*=\s*!active/, 'WebKit must not reconfigure text interaction during a Pencil stroke')
 assert.match(webModule, /const releasePen[\s\S]{0,120}?notifyPenActivity\(false\)/, 'WebKit text interaction must be restored after a Pencil stroke')
 assert.match(webModule, /addEventListener\(['"]pointerup['"],\s*releasePen/, 'the WebView must observe the end of a Pencil stroke')
 assert.match(webModule, /handwriting-pad__canvas/, 'handwriting canvases must be protected from iPad selection')

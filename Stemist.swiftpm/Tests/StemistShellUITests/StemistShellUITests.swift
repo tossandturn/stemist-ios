@@ -245,7 +245,7 @@ final class StemistShellUITests: XCTestCase {
         let reopenedAccountModule = webModule("web-module-ielts-account")
         guard reopenedAccountModule.waitForExistence(timeout: 5) else {
             let root = app.otherElements["stemist-root"]
-            let lifecycleProbe = app.buttons["tab-today"]
+            let lifecycleProbe = todayLifecycleProbe()
             XCTFail(
                 "Expected the same valid warm account deep link to reopen after its workspace closed."
                     + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
@@ -430,7 +430,7 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func openCustomURLFromSafari(_ url: URL) {
-        let lifecycleProbe = app.buttons["tab-today"]
+        let lifecycleProbe = todayLifecycleProbe()
         if app.state == .runningForeground {
             _ = lifecycleProbe.waitForExistence(timeout: 3)
         }
@@ -520,7 +520,7 @@ final class StemistShellUITests: XCTestCase {
         let springboardButton = springboard.buttons.matching(promptPredicate).firstMatch
         let safariButton = safari.buttons.matching(promptPredicate).firstMatch
         let root = app.otherElements["stemist-root"]
-        let lifecycleProbe = app.buttons["tab-today"]
+        let lifecycleProbe = todayLifecycleProbe()
         let deadline = Date().addingTimeInterval(timeout)
         var didTapOpenPrompt = false
         var didObserveSafariForeground = false
@@ -582,7 +582,7 @@ final class StemistShellUITests: XCTestCase {
         url: URL
     ) -> String {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let lifecycleProbe = app.buttons["tab-today"]
+        let lifecycleProbe = todayLifecycleProbe()
         return "Expected Safari to hand \(url.absoluteString) to Stemist."
             + "\n\nStemist state: \(app.state.rawValue)"
             + "\n\nRouting lifecycle probe: \(lifecycleProbeValue(lifecycleProbe))"
@@ -602,5 +602,14 @@ final class StemistShellUITests: XCTestCase {
     private func lifecycleProbeValue(_ probe: XCUIElement) -> String {
         guard probe.exists else { return "<missing>" }
         return String(describing: probe.value)
+    }
+
+    private func todayLifecycleProbe() -> XCUIElement {
+        // SwiftUI's iPad tab bar can expose more than one accessibility proxy
+        // with the same identifier after a scene handoff. firstMatch keeps the
+        // diagnostic read deterministic without changing the product tree.
+        app.buttons.matching(
+            NSPredicate(format: "identifier == %@", "tab-today")
+        ).firstMatch
     }
 }
