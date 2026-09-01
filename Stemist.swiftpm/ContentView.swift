@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 #if DEBUG
 import os
@@ -135,6 +136,24 @@ private struct WebWorkspaceChrome: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("web-workspace-chrome")
+    }
+}
+
+private struct RoutingLifecycleProbe: UIViewRepresentable {
+    let value: String
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+        view.isAccessibilityElement = true
+        view.accessibilityIdentifier = "stemist-routing-lifecycle"
+        view.accessibilityLabel = "Routing lifecycle"
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        view.accessibilityValue = value
     }
 }
 
@@ -337,14 +356,10 @@ struct ContentView: View {
             // diagnostics. SwiftUI's accessibility container can expose the
             // root value as empty, so deep-link tests observe this dedicated
             // monotonic token rather than infer a handoff from foreground state.
-            Text("Routing lifecycle")
-                .frame(width: 44, height: 44)
-                .opacity(0.01)
-                .allowsHitTesting(false)
-                .accessibilityElement(children: .ignore)
-                .accessibilityIdentifier("stemist-routing-lifecycle")
-                .accessibilityLabel("Routing lifecycle")
-                .accessibilityValue("\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)")
+            RoutingLifecycleProbe(
+                value: "\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)"
+            )
+            .allowsHitTesting(false)
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
