@@ -51,6 +51,7 @@ final class WebViewStore: ObservableObject {
 
     func stopForDismissal() {
         webView?.stopLoading()
+        webView?.configuration.preferences.isTextInteractionEnabled = true
         pauseForHiding()
     }
 }
@@ -220,10 +221,13 @@ private enum AccountEntryVisibilityScript {
 }
 
 private enum PenInputBehaviorScript {
+    static let handlerName = "stemistPenInput"
+
     static let install = """
     (() => {
         const host = window.location.hostname.toLowerCase();
         if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
+        const handler = window.webkit?.messageHandlers?.stemistPenInput;
         const drawingSelector = [
             'canvas',
             '[data-drawing-surface]',
@@ -258,11 +262,18 @@ private enum PenInputBehaviorScript {
         const blockSelection = (event) => {
             if (drawingTarget(event.target)) event.preventDefault();
         };
+        const notifyPenActivity = (active) => {
+            try { handler?.postMessage({ active }); } catch (_) {}
+        };
         const capturePen = (event) => {
             if (event.pointerType !== 'pen') return;
             const target = drawingTarget(event.target);
             if (!target || typeof target.setPointerCapture !== 'function') return;
+            notifyPenActivity(true);
             try { target.setPointerCapture(event.pointerId); } catch (_) {}
+        };
+        const releasePen = (event) => {
+            if (event.pointerType === 'pen') notifyPenActivity(false);
         };
 
         const observeDocument = () => {
@@ -280,6 +291,8 @@ private enum PenInputBehaviorScript {
         document.addEventListener('contextmenu', blockSelection, true);
         document.addEventListener('dragstart', blockSelection, true);
         document.addEventListener('pointerdown', capturePen, true);
+        document.addEventListener('pointerup', releasePen, true);
+        document.addEventListener('pointercancel', releasePen, true);
         if (document.documentElement) {
             observeDocument();
         } else {
@@ -546,6 +559,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.add(context.coordinator, name: PenInputBehaviorScript.handlerName)
         configuration.userContentController.add(context.coordinator, name: CameraCaptureIntentScript.handlerName)
         configuration.userContentController.addUserScript(
             WKUserScript(
@@ -631,6 +645,13 @@ struct EmbeddedWebView: UIViewRepresentable {
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
+            if message.name == PenInputBehaviorScript.handlerName {
+                let body = message.body as? [String: Any]
+                let active = body?["active"] as? Bool ?? false
+                store.webView?.configuration.preferences.isTextInteractionEnabled = !active
+                return
+            }
+
             guard message.name == CameraCaptureIntentScript.handlerName,
                   let body = message.body as? [String: Any],
                   body["kind"] as? String == "camera" else {
@@ -657,6 +678,7 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func load(_ url: URL, in webView: WKWebView) {
             requestedURL = url
+            webView.configuration.preferences.isTextInteractionEnabled = true
             lastReloadToken = parent.reloadToken
             hasRetriedAfterTermination = false
             parent.isLoading = true
