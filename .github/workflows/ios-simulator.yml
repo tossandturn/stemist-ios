@@ -182,6 +182,7 @@ jobs:
             -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes \
             -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch \
             -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement \
+            -only-testing:StemistShellUITests/StemistShellUITests/testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement \
             2>&1 | tee "$GITHUB_WORKSPACE/build/ios-qa/qa-shell-ui-tests.log"
           QA_UI_TEST_STATUS=${PIPESTATUS[0]}
           set -e

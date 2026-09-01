@@ -205,6 +205,57 @@ final class StemistShellUITests: XCTestCase {
         closeWebModule(accountModule, named: "web-module-ielts-account")
     }
 
+    func testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement() {
+        launchApp(fullFeatureTest: true)
+        selectTab("IELTS")
+
+        let listeningRoute = app.buttons["route-ielts-listening"]
+        XCTAssertTrue(waitUntilHittable(listeningRoute))
+        guard listeningRoute.exists, listeningRoute.isHittable else { return }
+        listeningRoute.tap()
+
+        let listeningModule = webModule("web-module-ielts-listening")
+        XCTAssertTrue(listeningModule.waitForExistence(timeout: 3))
+
+        openCustomURLFromSafari(accountURL)
+
+        XCTAssertTrue(
+            listeningModule.waitForNonExistence(timeout: 5),
+            "Expected a warm account deep link to replace the active IELTS module."
+        )
+        let accountModule = webModule("web-module-ielts-account")
+        guard accountModule.waitForExistence(timeout: 5) else {
+            let root = app.otherElements["stemist-root"]
+            XCTFail(
+                "Expected a warm account deep link to open the QA account module."
+                    + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
+                    + "\n\nAccessibility hierarchy after warm replacement:\n\(app.debugDescription)"
+            )
+            return
+        }
+        attachScreenshot(named: "qa-account-deep-link-opened-from-warm-replacement")
+
+        // The app deliberately suppresses duplicate system handoffs briefly.
+        // This verifies the next separate user action after that window expires.
+        waitForCustomURLReplayWindow()
+        closeWebModule(accountModule, named: "web-module-ielts-account")
+
+        openCustomURLFromSafari(accountURL)
+
+        let reopenedAccountModule = webModule("web-module-ielts-account")
+        guard reopenedAccountModule.waitForExistence(timeout: 5) else {
+            let root = app.otherElements["stemist-root"]
+            XCTFail(
+                "Expected the same valid warm account deep link to reopen after its workspace closed."
+                    + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
+                    + "\n\nAccessibility hierarchy after replaying the warm deep link:\n\(app.debugDescription)"
+            )
+            return
+        }
+        attachScreenshot(named: "qa-account-deep-link-reopened-after-warm-replacement")
+        closeWebModule(reopenedAccountModule, named: "web-module-ielts-account")
+    }
+
     private func launchApp(fullFeatureTest: Bool) {
         app = XCUIApplication()
         app.launchEnvironment["STEMIST_FULL_FEATURE_TEST"] = fullFeatureTest ? "YES" : "NO"
@@ -414,6 +465,14 @@ final class StemistShellUITests: XCTestCase {
             waitForStemistHandoff(from: safari),
             customURLHandoffFailureDescription(safari: safari, url: url)
         )
+    }
+
+    private func waitForCustomURLReplayWindow() {
+        let replayWindow = expectation(description: "custom URL duplicate suppression window expires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.25) {
+            replayWindow.fulfill()
+        }
+        wait(for: [replayWindow], timeout: 3)
     }
 
     private func safariAddressField(in safari: XCUIApplication) -> XCUIElement {

@@ -545,6 +545,7 @@ assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAn
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
+assert.match(shellUITests, /testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/, 'the shell suite must cover replaying a warm account deep link after replacement')
 assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?openCustomURLFromSafari\(accountURL\)/, 'the student account boundary must also survive a real cold-launch custom-scheme deep link')
 assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
@@ -996,6 +997,16 @@ assert.match(
   codemagic,
   /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/,
   'Codemagic must execute the in-process module replacement regression'
+)
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/,
+  'macOS CI must execute the warm account deep-link replay regression'
+)
+assert.match(
+  codemagic,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/,
+  'Codemagic must execute the warm account deep-link replay regression'
 )
 
 const studentShellTests = [
