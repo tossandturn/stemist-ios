@@ -844,7 +844,7 @@ struct EmbeddedWebView: UIViewRepresentable {
         var lastReloadToken: UUID?
         var fileUploadCompletion: (([URL]?) -> Void)?
         var hasRetriedAfterTermination = false
-        weak var pencilOverlay: NativePencilSurfaceOverlay?
+        fileprivate weak var pencilOverlay: NativePencilSurfaceOverlay?
         private var cameraCaptureIntentDeadline: Date?
 
         init(parent: EmbeddedWebView, store: WebViewStore) {
