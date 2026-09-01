@@ -683,7 +683,12 @@ private final class NativePencilSurfaceOverlay: UIView {
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard event?.allTouches?.contains(where: { $0.type == .pencil }) == true,
+        let pencilIsAtPoint = event?.allTouches?.contains(where: { touch in
+            guard touch.type == .pencil else { return false }
+            let location = touch.location(in: self)
+            return hypot(location.x - point.x, location.y - point.y) < 4
+        }) == true
+        guard pencilIsAtPoint,
               let surface = surfaces.first(where: { $0.frame.contains(point) }) else {
             return nil
         }
