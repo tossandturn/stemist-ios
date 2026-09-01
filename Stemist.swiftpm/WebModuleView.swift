@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import UIKit
+import AVFoundation
+import PencilKit
 import WebKit
 import SafariServices
 import UniformTypeIdentifiers
@@ -50,6 +52,7 @@ final class WebViewStore: ObservableObject {
 
     func stopForDismissal() {
         webView?.stopLoading()
+        webView?.configuration.preferences.isTextInteractionEnabled = true
         pauseForHiding()
     }
 }
@@ -214,6 +217,180 @@ private enum AccountEntryVisibilityScript {
         };
         document.addEventListener('DOMContentLoaded', start, { once: true });
         start();
+    })();
+    """
+}
+
+private enum PenInputBehaviorScript {
+    static let handlerName = "stemistPenInput"
+
+    static let install = """
+    (() => {
+        const host = window.location.hostname.toLowerCase();
+        if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
+        const handler = window.webkit?.messageHandlers?.stemistPenInput;
+        const drawingSelector = [
+            'canvas',
+            '[data-drawing-surface]',
+            '[data-handwriting-canvas]',
+            '[data-answer-canvas]',
+            '[data-input-mode="handwrite"]',
+            '.handwriting-pad__canvas',
+            '.pdf-ink-layer',
+            '.drawing-canvas',
+            '.handwriting-canvas',
+            '.signature-pad'
+        ].join(',');
+        const styleId = 'stemist-pen-input-behavior';
+        const drawingTarget = (target) => {
+            if (!(target instanceof Element)) return null;
+            return target.closest(drawingSelector);
+        };
+        const installStyle = () => {
+            if (document.getElementById(styleId)) return;
+            const root = document.head || document.documentElement;
+            if (!root) return;
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `${drawingSelector} {\\n`
+                + '  -webkit-user-select: none !important;\\n'
+                + '  user-select: none !important;\\n'
+                + '  -webkit-touch-callout: none !important;\\n'
+                + '  touch-action: none !important;\\n'
+                + '}';
+            root.appendChild(style);
+        };
+        const blockSelection = (event) => {
+            if (drawingTarget(event.target)) event.preventDefault();
+        };
+        const notifyPenActivity = (active) => {
+            try { handler?.postMessage({ active }); } catch (_) {}
+        };
+        const capturePen = (event) => {
+            if (event.pointerType !== 'pen') return;
+            const target = drawingTarget(event.target);
+            if (!target || typeof target.setPointerCapture !== 'function') return;
+            notifyPenActivity(true);
+            try { target.setPointerCapture(event.pointerId); } catch (_) {}
+        };
+        const releasePen = (event) => {
+            if (event.pointerType === 'pen') notifyPenActivity(false);
+        };
+
+        const observeDocument = () => {
+            const root = document.documentElement;
+            if (!root) return;
+            installStyle();
+            new MutationObserver(installStyle).observe(root, {
+                childList: true,
+                subtree: true
+            });
+        };
+
+        installStyle();
+        document.addEventListener('selectstart', blockSelection, true);
+        document.addEventListener('contextmenu', blockSelection, true);
+        document.addEventListener('dragstart', blockSelection, true);
+        document.addEventListener('pointerdown', capturePen, true);
+        document.addEventListener('pointerup', releasePen, true);
+        document.addEventListener('pointercancel', releasePen, true);
+        if (document.documentElement) {
+            observeDocument();
+        } else {
+            document.addEventListener('DOMContentLoaded', observeDocument, { once: true });
+        }
+    })();
+    """
+}
+
+private enum NativePencilSurfaceScript {
+    static let handlerName = "stemistPencilSurface"
+
+    static let observe = """
+    (() => {
+        const handler = window.webkit?.messageHandlers?.stemistPencilSurface;
+        if (!handler) return;
+        const selector = '[data-ink-surface="handwriting"], [data-ink-surface="pdf"]';
+        let frame = 0;
+        const report = () => {
+            frame = 0;
+            const surfaces = [...document.querySelectorAll(selector)]
+                .filter((element) => element.dataset.inkInteractive === 'true')
+                .map((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        id: element.dataset.inkSurfaceId || '',
+                        x: rect.left,
+                        y: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                        tool: element.dataset.inkTool === 'eraser' ? 'eraser' : 'pen'
+                    };
+                })
+                .filter((surface) => surface.id && surface.width > 0 && surface.height > 0);
+            try { handler.postMessage({ surfaces }); } catch (_) {}
+        };
+        const schedule = () => {
+            if (frame) return;
+            frame = requestAnimationFrame(report);
+        };
+        const start = () => {
+            if (!document.documentElement) return;
+            const observer = new MutationObserver(schedule);
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['data-ink-interactive', 'data-ink-tool', 'style', 'class']
+            });
+            window.addEventListener('resize', schedule, { passive: true });
+            window.addEventListener('scroll', schedule, { capture: true, passive: true });
+            schedule();
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', start, { once: true });
+        } else {
+            start();
+        }
+    })();
+    """
+}
+
+private enum CameraCaptureIntentScript {
+    static let handlerName = "stemistCameraCapture"
+
+    static let observe = """
+    (() => {
+        const host = window.location.hostname.toLowerCase();
+        if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
+        const handler = window.webkit?.messageHandlers?.stemistCameraCapture;
+        if (!handler) return;
+        const cameraLabel = /^(take photo|camera|拍照|使用摄像头|打开摄像头)$/i;
+        const textOf = (element) => (element?.textContent || '')
+            .replace(/\\s+/g, ' ')
+            .trim();
+        const isCameraInput = (element) => element instanceof HTMLInputElement
+            && element.type === 'file'
+            && (element.hasAttribute('capture') || element.hasAttribute('data-camera-input'));
+        const isCameraControl = (element) => {
+            if (!(element instanceof Element)) return false;
+            if (isCameraInput(element)) return true;
+            if (element.hasAttribute('data-camera-intent')) return true;
+            if (!element.matches('button, [role="button"], label')) return false;
+            return cameraLabel.test(textOf(element));
+        };
+        document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element)) return;
+            const candidates = [
+                event.target.closest('input[type="file"]'),
+                event.target.closest('button, [role="button"]'),
+                event.target.closest('label')
+            ].filter(Boolean);
+            if (!candidates.some(isCameraControl)) return;
+            try {
+                handler.postMessage({ kind: 'camera' });
+            } catch (_) {}
+        }, true);
     })();
     """
 }
@@ -414,6 +591,138 @@ struct WebModuleView: View {
     }
 }
 
+private struct NativePencilSurface {
+    let id: String
+    let frame: CGRect
+    let tool: String
+}
+
+private final class PencilStrokeCanvasView: PKCanvasView {
+    var onStrokeEnd: (() -> Void)?
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        // PencilKit updates its PKDrawing during the super call. Deliver on
+        // the next main-run-loop turn so the final control point is included
+        // before the bridge snapshots the stroke.
+        DispatchQueue.main.async { [weak self] in
+            self?.onStrokeEnd?()
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        DispatchQueue.main.async { [weak self] in
+            self?.onStrokeEnd?()
+        }
+    }
+}
+
+private final class NativePencilSurfaceOverlay: UIView {
+    struct Stroke {
+        let surfaceID: String
+        let tool: String
+        let points: [[String: Any]]
+    }
+
+    private let canvasView = PencilStrokeCanvasView(frame: .zero)
+    private var surfaces: [NativePencilSurface] = []
+    private var activeSurface: NativePencilSurface?
+
+    var onStrokeEnd: (() -> Void)? {
+        didSet {
+            canvasView.onStrokeEnd = { [weak self] in
+                self?.onStrokeEnd?()
+            }
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        isAccessibilityElement = false
+        accessibilityElementsHidden = true
+        canvasView.translatesAutoresizingMaskIntoConstraints = false
+        canvasView.backgroundColor = .clear
+        canvasView.isOpaque = false
+        canvasView.drawingPolicy = .pencilOnly
+        canvasView.allowsFingerDrawing = false
+        canvasView.isMultipleTouchEnabled = false
+        canvasView.tool = PKInkingTool(.pen, color: .label, width: 2)
+        addSubview(canvasView)
+        NSLayoutConstraint.activate([
+            canvasView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            canvasView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            canvasView.topAnchor.constraint(equalTo: topAnchor),
+            canvasView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func reset() {
+        surfaces = []
+        activeSurface = nil
+        canvasView.drawing = PKDrawing()
+    }
+
+    func updateSurfaces(_ next: [NativePencilSurface]) {
+        surfaces = next
+        if let activeSurface,
+           !next.contains(where: { $0.id == activeSurface.id }) {
+            self.activeSurface = nil
+        }
+        if let tool = next.first?.tool, tool == "eraser" {
+            canvasView.tool = PKEraserTool(.vector)
+        } else {
+            canvasView.tool = PKInkingTool(.pen, color: .label, width: 2)
+        }
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard event?.allTouches?.contains(where: { $0.type == .pencil }) == true,
+              let surface = surfaces.first(where: { $0.frame.contains(point) }) else {
+            return nil
+        }
+        activeSurface = surface
+        canvasView.tool = surface.tool == "eraser"
+            ? PKEraserTool(.vector)
+            : PKInkingTool(.pen, color: .label, width: 2)
+        return canvasView
+    }
+
+    func consumeLatestStroke() -> Stroke? {
+        guard let activeSurface,
+              let stroke = canvasView.drawing.strokes.last else {
+            canvasView.drawing = PKDrawing()
+            return nil
+        }
+
+        let path = stroke.path
+        guard path.count > 0 else {
+            canvasView.drawing = PKDrawing()
+            return nil
+        }
+
+        var points: [[String: Any]] = []
+        points.reserveCapacity(path.count)
+        for index in 0..<path.count {
+            let point = path[index]
+            let location = point.location.applying(stroke.transform)
+            points.append([
+                "x": Double(location.x),
+                "y": Double(location.y),
+                "pressure": Double(point.force),
+            ])
+        }
+        canvasView.drawing = PKDrawing()
+        return Stroke(surfaceID: activeSurface.id, tool: activeSurface.tool, points: points)
+    }
+}
+
 struct EmbeddedWebView: UIViewRepresentable {
     let url: URL
     let reloadToken: UUID
@@ -436,6 +745,30 @@ struct EmbeddedWebView: UIViewRepresentable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.add(context.coordinator, name: PenInputBehaviorScript.handlerName)
+        configuration.userContentController.add(context.coordinator, name: NativePencilSurfaceScript.handlerName)
+        configuration.userContentController.add(context.coordinator, name: CameraCaptureIntentScript.handlerName)
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: PenInputBehaviorScript.install,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: NativePencilSurfaceScript.observe,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: CameraCaptureIntentScript.observe,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
         if !allowsAccountEntry {
             configuration.userContentController.addUserScript(
                 WKUserScript(
@@ -446,6 +779,19 @@ struct EmbeddedWebView: UIViewRepresentable {
             )
         }
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        let pencilOverlay = NativePencilSurfaceOverlay(frame: .zero)
+        pencilOverlay.translatesAutoresizingMaskIntoConstraints = false
+        webView.addSubview(pencilOverlay)
+        NSLayoutConstraint.activate([
+            pencilOverlay.leadingAnchor.constraint(equalTo: webView.leadingAnchor),
+            pencilOverlay.trailingAnchor.constraint(equalTo: webView.trailingAnchor),
+            pencilOverlay.topAnchor.constraint(equalTo: webView.topAnchor),
+            pencilOverlay.bottomAnchor.constraint(equalTo: webView.bottomAnchor),
+        ])
+        context.coordinator.pencilOverlay = pencilOverlay
+        pencilOverlay.onStrokeEnd = { [weak coordinator = context.coordinator] in
+            coordinator?.forwardLatestPencilStroke()
+        }
         webView.allowsBackForwardNavigationGestures = true
         webView.isOpaque = false
         webView.backgroundColor = .systemBackground
@@ -456,6 +802,10 @@ struct EmbeddedWebView: UIViewRepresentable {
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.keyboardDismissMode = .interactive
         webView.scrollView.panGestureRecognizer.cancelsTouchesInView = false
+        // Keep text interaction stable. Toggling this preference from a
+        // JavaScript pointer callback causes a measurable Pencil hitch in
+        // WKWebView; drawing surfaces opt out of selection themselves.
+        configuration.preferences.isTextInteractionEnabled = true
         configureInputGestures(for: webView)
         store.webView = webView
         webView.accessibilityIdentifier = accessibilityIdentifier
@@ -486,18 +836,103 @@ struct EmbeddedWebView: UIViewRepresentable {
         Coordinator(parent: self, store: store)
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, UIDocumentPickerDelegate,
+        UIImagePickerControllerDelegate, UINavigationControllerDelegate, WKScriptMessageHandler {
         var parent: EmbeddedWebView
         var store: WebViewStore
         var requestedURL: URL?
         var lastReloadToken: UUID?
         var fileUploadCompletion: (([URL]?) -> Void)?
         var hasRetriedAfterTermination = false
+        fileprivate weak var pencilOverlay: NativePencilSurfaceOverlay?
+        private var cameraCaptureIntentDeadline: Date?
 
         init(parent: EmbeddedWebView, store: WebViewStore) {
             self.parent = parent
             self.store = store
             super.init()
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            if message.name == PenInputBehaviorScript.handlerName {
+                // Do not mutate WKPreferences while a Pencil stroke is in
+                // flight. WebKit applies that preference asynchronously and
+                // can interrupt the same pointer stream that is painting the
+                // answer. Selection/callout suppression is handled by the
+                // scoped CSS, pointer cancellation and context-menu delegate,
+                // so the preference remains stable for the document lifetime.
+                return
+            }
+
+            if message.name == NativePencilSurfaceScript.handlerName {
+                updatePencilSurfaces(from: message.body)
+                return
+            }
+
+            guard message.name == CameraCaptureIntentScript.handlerName,
+                  let body = message.body as? [String: Any],
+                  body["kind"] as? String == "camera" else {
+                return
+            }
+
+            // The message arrives immediately before WebKit asks the delegate
+            // to present the file panel for the same input. Keep the window
+            // short so a later Upload photo action cannot inherit camera mode.
+            cameraCaptureIntentDeadline = Date().addingTimeInterval(2)
+        }
+
+        private func updatePencilSurfaces(from body: Any) {
+            guard let body = body as? [String: Any],
+                  let rawSurfaces = body["surfaces"] as? [[String: Any]] else {
+                pencilOverlay?.reset()
+                return
+            }
+
+            let surfaces = rawSurfaces.compactMap { raw -> NativePencilSurface? in
+                guard let id = raw["id"] as? String,
+                      let x = raw["x"] as? NSNumber,
+                      let y = raw["y"] as? NSNumber,
+                      let width = raw["width"] as? NSNumber,
+                      let height = raw["height"] as? NSNumber,
+                      width.doubleValue > 0,
+                      height.doubleValue > 0 else {
+                    return nil
+                }
+                return NativePencilSurface(
+                    id: id,
+                    frame: CGRect(
+                        x: x.doubleValue,
+                        y: y.doubleValue,
+                        width: width.doubleValue,
+                        height: height.doubleValue
+                    ),
+                    tool: raw["tool"] as? String == "eraser" ? "eraser" : "pen"
+                )
+            }
+            pencilOverlay?.updateSurfaces(surfaces)
+        }
+
+        func forwardLatestPencilStroke() {
+            guard let webView = store.webView,
+                  let stroke = pencilOverlay?.consumeLatestStroke(),
+                  !stroke.points.isEmpty,
+                  let payloadData = try? JSONSerialization.data(
+                      withJSONObject: [
+                          "surfaceId": stroke.surfaceID,
+                          "tool": stroke.tool,
+                          "points": stroke.points,
+                      ],
+                      options: []
+                  ),
+                  let payload = String(data: payloadData, encoding: .utf8) else {
+                return
+            }
+
+            let script = "window.dispatchEvent(new CustomEvent('stemist-native-pencil-stroke',{detail:\(payload)}));"
+            webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
         private func restartLoadWatchdog() {
@@ -514,6 +949,8 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func load(_ url: URL, in webView: WKWebView) {
             requestedURL = url
+            pencilOverlay?.reset()
+            webView.configuration.preferences.isTextInteractionEnabled = true
             lastReloadToken = parent.reloadToken
             hasRetriedAfterTermination = false
             parent.isLoading = true
@@ -608,6 +1045,18 @@ struct EmbeddedWebView: UIViewRepresentable {
             return nil
         }
 
+        @available(iOS 13.0, *)
+        func webView(
+            _ webView: WKWebView,
+            contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
+            completionHandler: @escaping (UIContextMenuConfiguration?) -> Void
+        ) {
+            // Product actions have their own native/web controls. Returning
+            // nil prevents a long Pencil press from opening WebKit's copy,
+            // lookup or link-preview menu over the drawing surface.
+            completionHandler(nil)
+        }
+
         func webView(
             _ webView: WKWebView,
             runJavaScriptAlertPanelWithMessage message: String,
@@ -692,6 +1141,11 @@ struct EmbeddedWebView: UIViewRepresentable {
             fileUploadCompletion?(nil)
             fileUploadCompletion = completionHandler
 
+            if consumeCameraCaptureIntent() {
+                presentCameraCapture(in: webView)
+                return
+            }
+
             let picker = UIDocumentPickerViewController(
                 forOpeningContentTypes: [
                     UTType.item,
@@ -732,6 +1186,112 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             finishFileUpload(with: nil)
+        }
+
+        private func consumeCameraCaptureIntent() -> Bool {
+            defer { cameraCaptureIntentDeadline = nil }
+            guard let deadline = cameraCaptureIntentDeadline else { return false }
+            return deadline > Date()
+        }
+
+        private func presentCameraCapture(in webView: WKWebView) {
+            guard let presenter = presentingViewController(for: webView),
+                  !(presenter is UIAlertController),
+                  !(presenter is UIDocumentPickerViewController),
+                  !(presenter is UIImagePickerController) else {
+                finishFileUpload(with: nil)
+                return
+            }
+
+            guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+                presentCameraUnavailable(on: presenter)
+                return
+            }
+
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                presentCameraPicker(on: presenter)
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .video) { [weak self, weak presenter] granted in
+                    DispatchQueue.main.async {
+                        guard let self, let presenter else { return }
+                        if granted {
+                            self.presentCameraPicker(on: presenter)
+                        } else {
+                            self.presentCameraPermissionDenied(on: presenter)
+                        }
+                    }
+                }
+            case .denied, .restricted:
+                presentCameraPermissionDenied(on: presenter)
+            @unknown default:
+                presentCameraPermissionDenied(on: presenter)
+            }
+        }
+
+        private func presentCameraPicker(on presenter: UIViewController) {
+            let picker = UIImagePickerController()
+            picker.sourceType = .camera
+            picker.cameraCaptureMode = .photo
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+        }
+
+        private func presentCameraUnavailable(on presenter: UIViewController) {
+            let alert = UIAlertController(
+                title: "Camera unavailable",
+                message: "This device cannot open a camera right now. Choose Upload photo instead.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+            })
+            presenter.present(alert, animated: true)
+        }
+
+        private func presentCameraPermissionDenied(on presenter: UIViewController) {
+            let alert = UIAlertController(
+                title: "Camera access is off",
+                message: "Allow camera access in Settings, then try Take photo again.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+            })
+            alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { [weak self] _ in
+                self?.finishFileUpload(with: nil)
+                guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(settingsURL, options: [:])
+            })
+            presenter.present(alert, animated: true)
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            let image = info[.originalImage] as? UIImage
+            let fileURL = image.flatMap { image -> URL? in
+                guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("stemist-camera-\(UUID().uuidString).jpg")
+                do {
+                    try data.write(to: url, options: .atomic)
+                    return url
+                } catch {
+                    return nil
+                }
+            }
+
+            picker.dismiss(animated: true) { [weak self] in
+                self?.finishFileUpload(with: fileURL.map { [$0] })
+            }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true) { [weak self] in
+                self?.finishFileUpload(with: nil)
+            }
         }
 
         func webView(

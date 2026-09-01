@@ -131,6 +131,11 @@ assert.match(
 )
 assert.match(
   contentView,
+  /WebWorkspaceHost[\s\S]{0,1800}?onChange\(of:\s*launch\.id\)[\s\S]{0,260}?onMount\(launch\)/,
+  'a resident workspace must acknowledge a pending deep link when an in-place route replacement changes its launch'
+)
+assert.match(
+  contentView,
   /guard\s+let\s+url\s*=\s*routeCoordinator\.peekPendingURL\(\)[\s\S]{0,260}?guard\s+let\s+launch\s*=\s*WebRouteLaunch\([\s\S]{0,320}?else\s*\{[\s\S]{0,180}?acknowledgePendingURL\(url\)[\s\S]{0,80}?return/,
   'a blocked or malformed deep link must be acknowledged after rejection instead of remaining pending forever'
 )
@@ -163,6 +168,11 @@ assert.match(
   contentView,
   /accessibilityIdentifier\("stemist-root"\)[\s\S]{0,220}?#if DEBUG[\s\S]{0,260}?accessibilityValue\("\\\(routeCoordinator\.debugSnapshot\) \| \\\(webWorkspace\.debugSnapshot\)"\)/,
   'the root accessibility element must expose routing diagnostics to the iPad UI suite'
+)
+assert.match(
+  contentView,
+  /accessibilityIdentifier\("tab-today"\)[\s\S]{0,220}?accessibilityValue\("\\\(routeCoordinator\.lifecycleRevision\)\|\\\(webWorkspace\.lifecycleRevision\)"\)/,
+  'the stable Today tab must expose a monotonic lifecycle token because root accessibility containers may return an empty value'
 )
 assert.doesNotMatch(
   contentView,
@@ -545,6 +555,7 @@ assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAn
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
+assert.match(shellUITests, /testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/, 'the shell suite must cover replaying a warm account deep link after replacement')
 assert.match(shellUITests, /app\.terminate\(\)[\s\S]{0,220}?openCustomURLFromSafari\(accountURL\)/, 'the student account boundary must also survive a real cold-launch custom-scheme deep link')
 assert.match(shellUITests, /app\.buttons\["web-open-account"\]/, 'the QA dismissal regression must use an in-process route request')
 assert.doesNotMatch(
@@ -602,6 +613,11 @@ assert.match(
 )
 assert.match(
   shellUITests,
+  /addressField\.tap\(\)[\s\S]{0,420}?safari\.typeKey\(\s*["']a["']\s*,\s*modifierFlags:\s*\.command\s*\)[\s\S]{0,220}?safari\.typeText\(url\.absoluteString\)/,
+  'each Safari custom-scheme attempt must replace the existing address instead of appending to the previous URL'
+)
+assert.match(
+  shellUITests,
   /SearchFieldItemView[\s\S]{0,260}?\.firstMatch/,
   'Safari address input must prefer the stable focused search-field identifier over duplicate accessibility labels'
 )
@@ -617,12 +633,22 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /private func waitForStemistHandoff[\s\S]{0,1200}?let\s+root\s*=\s*app\.otherElements\["stemist-root"\][\s\S]{0,700}?app\.state\s*==\s*\.runningForeground,\s*root\.exists/,
-  'custom-scheme handoff is complete only after Stemist is foreground and its root has mounted'
+  /private func waitForStemistHandoff[\s\S]{0,1800}?previousLifecycleValue[\s\S]{0,1800}?didObserveSafariForeground[\s\S]{0,1800}?didObserveStemistBackground[\s\S]{0,1800}?lifecycleChanged[\s\S]{0,500}?app\.state\s*==\s*\.runningForeground[\s\S]{0,220}?root\.exists/,
+  'custom-scheme handoff must observe a new Safari-to-Stemist lifecycle and token, not just an already-foreground app'
 )
 assert.match(
   shellUITests,
-  /goButton\.tap\(\)[\s\S]{0,260}?waitForStemistHandoff\(from:\s*safari\)/,
+  /private\s+func\s+todayLifecycleProbe\(\)\s*->\s*XCUIElement[\s\S]{0,420}?identifier\s*==\s*%@/,
+  'custom-scheme handoff tests must read the stable Today-tab lifecycle token'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /if\s+app\.state\s*==\s*\.runningForeground,\s*root\.exists\s*\{\s*return\s+true\s*\}/,
+  'custom-scheme handoff must not return early from a stale foreground state'
+)
+assert.match(
+  shellUITests,
+  /goButton\.tap\(\)[\s\S]{0,320}?waitForStemistHandoff\(from:\s*safari,\s*previousLifecycleValue:\s*previousLifecycleValue\)/,
   'submitting the Safari URL must wait for the app handoff instead of returning after the prompt tap'
 )
 assert.doesNotMatch(
@@ -632,7 +658,7 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
-  /var\s+didTapOpenPrompt\s*=\s*false[\s\S]{0,900}?if\s+!didTapOpenPrompt\s*\{[\s\S]{0,700}?promptButton\.tap\(\)[\s\S]{0,160}?didTapOpenPrompt\s*=\s*true/,
+  /var\s+didTapOpenPrompt\s*=\s*false[\s\S]{0,1400}?if\s+!didTapOpenPrompt\s*\{[\s\S]{0,1200}?promptButton\.tap\(\)[\s\S]{0,300}?didTapOpenPrompt\s*=\s*true/,
   'custom-scheme handoff must stop querying Safari and SpringBoard prompt elements after the first successful tap'
 )
 assert.match(
@@ -733,6 +759,8 @@ assert.doesNotMatch(webModule, /stemistWebGoBack|stemistWebGoForward/, 'global n
 assert.match(webModule, /static let websiteDataStore\s*=\s*WKWebsiteDataStore\.default\(\)/, 'SSO needs one persistent WebKit data store')
 assert.match(webModule, /websiteDataStore\s*=\s*WebViewEnvironment\.websiteDataStore/, 'every product page must use the shared persistent WebKit data store')
 assert.match(webModule, /WKUIDelegate/, 'WebKit UI delegate is required for upload and media flows')
+assert.match(webModule, /contextMenuConfigurationForElement/, 'WebKit context menus must not cover Pencil writing with copy or lookup actions')
+assert.match(webModule, /contextMenuConfigurationForElement[\s\S]{0,420}?completionHandler\(nil\)/, 'the native WebView must explicitly suppress its contextual menu')
 assert.match(webModule, /runJavaScriptAlertPanelWithMessage/, 'web alert dialogs must complete on iPad')
 assert.match(webModule, /runJavaScriptConfirmPanelWithMessage/, 'web confirm dialogs must complete on iPad')
 assert.match(webModule, /runJavaScriptTextInputPanelWithPrompt/, 'web prompt dialogs must complete on iPad')
@@ -836,6 +864,30 @@ assert.match(
   'the iOS 18.4 file-picker API must be conditionally compiled for older SDKs'
 )
 assert.match(webModule, /requestMediaCapturePermissionFor/, 'speaking needs an explicit media permission policy')
+assert.match(webModule, /PenInputBehaviorScript/, 'iPad pen input needs a scoped selection-protection script')
+assert.match(webModule, /import\s+PencilKit/, 'iPad writing must have a native PencilKit capture path')
+assert.match(webModule, /NativePencilSurfaceScript/, 'native PencilKit capture must discover explicit web ink surfaces')
+assert.match(webModule, /data-ink-interactive/, 'native PencilKit capture must ignore disabled and read-only surfaces')
+assert.match(webModule, /drawingPolicy\s*=\s*\.pencilOnly/, 'native PencilKit capture must be Pencil-only so finger scrolling passes through')
+assert.match(webModule, /stemist-native-pencil-stroke/, 'native PencilKit strokes must be returned to the web ink model')
+assert.match(webModule, /func\s+forwardLatestPencilStroke\(\)/, 'native PencilKit strokes must flush through the WebView bridge')
+assert.match(webModule, /static let handlerName = "stemistPenInput"/, 'pen activity must have a native WebView message channel')
+assert.match(webModule, /isTextInteractionEnabled\s*=\s*true/, 'WebKit text interaction must remain stable while drawing CSS and the delegate suppress selection')
+assert.doesNotMatch(webModule, /isTextInteractionEnabled\s*=\s*!active/, 'WebKit must not reconfigure text interaction during a Pencil stroke')
+assert.match(webModule, /const releasePen[\s\S]{0,120}?notifyPenActivity\(false\)/, 'WebKit text interaction must be restored after a Pencil stroke')
+assert.match(webModule, /addEventListener\(['"]pointerup['"],\s*releasePen/, 'the WebView must observe the end of a Pencil stroke')
+assert.match(webModule, /handwriting-pad__canvas/, 'handwriting canvases must be protected from iPad selection')
+assert.match(webModule, /pdf-ink-layer/, 'PDF ink canvases must be protected from iPad selection')
+assert.match(webModule, /-webkit-user-select:\s*none/, 'drawing surfaces must opt out of native text selection')
+assert.match(webModule, /-webkit-touch-callout:\s*none/, 'drawing surfaces must suppress the iPad callout menu')
+assert.match(webModule, /touch-action:\s*none/, 'drawing surfaces must retain pen pointer ownership')
+assert.match(webModule, /pointerType\s*!==\s*['"]pen['"]/, 'pen pointer capture must stay scoped to Apple Pencil input')
+assert.match(webModule, /CameraCaptureIntentScript/, 'Take photo must have an explicit native camera intent bridge')
+assert.match(webModule, /WKScriptMessageHandler/, 'the WebView must receive the camera intent from the product page')
+assert.match(webModule, /UIImagePickerController\.isSourceTypeAvailable\(\.camera\)/, 'Take photo must verify camera availability')
+assert.match(webModule, /sourceType\s*=\s*\.camera/, 'Take photo must present the native camera picker')
+assert.match(webModule, /AVCaptureDevice\.requestAccess\(for:\s*\.video\)/, 'camera permission must be requested before presenting capture')
+assert.match(webModule, /Choose Upload photo instead/, 'camera-unavailable state must direct the user to the separate upload flow')
 assert.match(webModule, /userInterfaceIdiom\s*==\s*\.pad/, 'iPad input needs a dedicated gesture policy')
 assert.match(webModule, /allowedTouchTypes/, 'the scroll gesture must not consume Apple Pencil input')
 assert.match(webModule, /TouchType\.direct/, 'finger scrolling must remain enabled on iPad')
@@ -996,6 +1048,16 @@ assert.match(
   codemagic,
   /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/,
   'Codemagic must execute the in-process module replacement regression'
+)
+assert.match(
+  githubWorkflow,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/,
+  'macOS CI must execute the warm account deep-link replay regression'
+)
+assert.match(
+  codemagic,
+  /-only-testing:StemistShellUITests\/StemistShellUITests\/testFullFeatureQABuildReopensWarmAccountDeepLinkAfterModuleReplacement/,
+  'Codemagic must execute the warm account deep-link replay regression'
 )
 
 const studentShellTests = [

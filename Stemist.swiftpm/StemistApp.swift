@@ -11,6 +11,10 @@ final class AppRouteCoordinator: ObservableObject {
     static let shared = AppRouteCoordinator()
 
     @Published private(set) var pendingURL: URL?
+    /// Monotonic, non-sensitive lifecycle evidence for UI tests and support
+    /// diagnostics. It changes whenever a URL is received or acknowledged,
+    /// even when the debug-only string snapshot is not compiled in.
+    @Published private(set) var lifecycleRevision = 0
 
     #if DEBUG
     @Published private(set) var debugSnapshot = "0 init"
@@ -39,6 +43,7 @@ final class AppRouteCoordinator: ObservableObject {
     }
 
     func receive(_ url: URL, source: String = "unknown") {
+        lifecycleRevision &+= 1
         record("receive[\(source)]", url: url)
         guard pendingURL != url else { return }
 
@@ -63,6 +68,7 @@ final class AppRouteCoordinator: ObservableObject {
         pendingURL = nil
         lastAcknowledgedURL = url
         lastAcknowledgedAt = Date()
+        lifecycleRevision &+= 1
         record("acknowledged", url: url)
     }
 }

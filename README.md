@@ -10,7 +10,7 @@ The native iOS/iPadOS entry point for the unified IELTSist and STEM learning pro
 
 Swift Playgrounds metadata caches are intentionally not versioned. If an older iPad copy still shows a previous app name or capability list, close the playground, remove its local cached manifest, and reopen the package so it is regenerated from `Stemist.swiftpm/Package.swift`.
 
-The app currently provides a native tab shell and deliberately loads the existing public product surfaces through a controlled `WKWebView`. Authentication, AI marking, Apple Pencil capture, and subscriptions remain server-backed integrations and must not place credentials in this repository.
+The app currently provides a native tab shell and deliberately loads the existing public product surfaces through a controlled `WKWebView`. Authentication, AI marking, and subscriptions remain server-backed integrations and must not place credentials in this repository. On iPad, interactive handwriting surfaces opt into a native PencilKit capture layer for low-latency Pencil rendering; the resulting stroke is handed back to the web ink model so autosave, undo/redo, evidence storage and AI marking remain unchanged. Pages without an explicit interactive ink surface continue to use the WebView input path.
 
 ## Account visibility and full-function testing
 

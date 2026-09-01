@@ -16,6 +16,10 @@ enum AppTab: Hashable {
 final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
     @Published private(set) var activePresentationID: UUID?
+    /// Monotonic route lifecycle evidence used by UI acceptance tests. This is
+    /// intentionally available in every build so handoff tests do not depend
+    /// on a debug-only accessibility string being exposed by SwiftUI.
+    @Published private(set) var lifecycleRevision = 0
     #if DEBUG
     @Published private(set) var debugSnapshot = "0 init"
     private var debugSequence = 0
@@ -36,6 +40,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     #endif
 
     func present(_ launch: WebRouteLaunch) {
+        lifecycleRevision &+= 1
         record("present(\(launch.route.id))")
         guard activeLaunch?.id != launch.id else { return }
         activePresentationID = UUID()
@@ -45,6 +50,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
     @discardableResult
     func dismiss() -> UUID? {
+        lifecycleRevision &+= 1
         record("dismiss()")
         guard activeLaunch != nil, let presentationID = activePresentationID else {
             return nil
@@ -61,6 +67,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     /// workspace after a new route has already replaced it. The identity
     /// check makes that callback harmless instead of clearing the new route.
     func completeDismissal(for presentationID: UUID?) {
+        lifecycleRevision &+= 1
         guard let presentationID, activePresentationID == presentationID else {
             record("ignored-late-dismissal")
             return
@@ -159,6 +166,10 @@ private struct WebWorkspaceHost: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { onMount(launch) }
+        // The resident host is intentionally not recreated for an in-process
+        // route replacement. A pending custom URL therefore needs the same
+        // post-mount acknowledgement when only the typed launch changes.
+        .onChange(of: launch.id) { _, _ in onMount(launch) }
         .onDisappear { onDisappear(presentationID) }
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
         .accessibilityElement(children: .contain)
@@ -234,6 +245,7 @@ struct ContentView: View {
                         Label("Today", systemImage: "house")
                             .accessibilityElement(children: .ignore)
                             .accessibilityIdentifier("tab-today")
+                            .accessibilityValue("\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)")
                     }
                     .tag(AppTab.today)
                     .accessibilityIdentifier("tab-today-content")
@@ -321,6 +333,7 @@ struct ContentView: View {
                 .zIndex(10)
                 .accessibilityAddTraits(.isModal)
             }
+
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)

@@ -45,7 +45,7 @@ The QA setting is an internal build configuration, not a student-facing control.
 | --- | --- |
 | Curriculum separation | IG, AS, and A2 routes remain separate. Topic practice, past papers, and notebook retain route and stage context. |
 | Paper content | A question with diagrams or source imagery renders completely before a student starts work. |
-| Notebook and handwriting | Apple Pencil ink is continuous across multiple strokes. Finger scroll remains available, and Pencil input is not consumed by the parent scroll view. |
+| Notebook and handwriting | On an interactive handwriting or PDF surface, PencilKit captures continuous ink across multiple strokes with no selection callout; finger scroll remains available, and the stroke is returned to the web ink model for undo/redo, autosave and AI evidence. Pages without an interactive ink surface retain the WebView fallback. |
 | Submission and marking | Upload or capture a disposable handwritten response, submit it, verify pending and result states, and distinguish student self-score, AI provisional score, teacher score, and official mark-scheme outcome where applicable. |
 | STEM Coach | Open Coach from Today and a paper context. Verify contextual prompt, streaming or loading state, failure state, retry, and no cross-account history leakage. |
 
