@@ -602,12 +602,19 @@ private final class PencilStrokeCanvasView: PKCanvasView {
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesEnded(touches, with: event)
-        onStrokeEnd?()
+        // PencilKit updates its PKDrawing during the super call. Deliver on
+        // the next main-run-loop turn so the final control point is included
+        // before the bridge snapshots the stroke.
+        DispatchQueue.main.async { [weak self] in
+            self?.onStrokeEnd?()
+        }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesCancelled(touches, with: event)
-        onStrokeEnd?()
+        DispatchQueue.main.async { [weak self] in
+            self?.onStrokeEnd?()
+        }
     }
 }
 
