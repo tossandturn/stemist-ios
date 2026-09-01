@@ -16,6 +16,10 @@ enum AppTab: Hashable {
 final class WebWorkspaceCoordinator: ObservableObject {
     @Published private(set) var activeLaunch: WebRouteLaunch?
     @Published private(set) var activePresentationID: UUID?
+    /// Monotonic route lifecycle evidence used by UI acceptance tests. This is
+    /// intentionally available in every build so handoff tests do not depend
+    /// on a debug-only accessibility string being exposed by SwiftUI.
+    @Published private(set) var lifecycleRevision = 0
     #if DEBUG
     @Published private(set) var debugSnapshot = "0 init"
     private var debugSequence = 0
@@ -36,6 +40,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     #endif
 
     func present(_ launch: WebRouteLaunch) {
+        lifecycleRevision &+= 1
         record("present(\(launch.route.id))")
         guard activeLaunch?.id != launch.id else { return }
         activePresentationID = UUID()
@@ -45,6 +50,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
 
     @discardableResult
     func dismiss() -> UUID? {
+        lifecycleRevision &+= 1
         record("dismiss()")
         guard activeLaunch != nil, let presentationID = activePresentationID else {
             return nil
@@ -61,6 +67,7 @@ final class WebWorkspaceCoordinator: ObservableObject {
     /// workspace after a new route has already replaced it. The identity
     /// check makes that callback harmless instead of clearing the new route.
     func completeDismissal(for presentationID: UUID?) {
+        lifecycleRevision &+= 1
         guard let presentationID, activePresentationID == presentationID else {
             record("ignored-late-dismissal")
             return
@@ -326,20 +333,18 @@ struct ContentView: View {
                 .accessibilityAddTraits(.isModal)
             }
 
-#if DEBUG
-            // Keep a small, explicit lifecycle probe for UI tests. SwiftUI's
-            // accessibility container can expose the root value as empty even
-            // when its value changes, so the deep-link test must observe a
-            // dedicated token rather than infer a handoff from foreground state.
+            // Keep a small, explicit lifecycle probe for UI tests and support
+            // diagnostics. SwiftUI's accessibility container can expose the
+            // root value as empty, so deep-link tests observe this dedicated
+            // monotonic token rather than infer a handoff from foreground state.
             Text("Routing lifecycle")
-                .frame(width: 1, height: 1)
+                .frame(width: 44, height: 44)
                 .opacity(0.01)
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("stemist-routing-lifecycle")
                 .accessibilityLabel("Routing lifecycle")
-                .accessibilityValue("\(routeCoordinator.debugSnapshot) | \(webWorkspace.debugSnapshot)")
-#endif
+                .accessibilityValue("\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)")
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)

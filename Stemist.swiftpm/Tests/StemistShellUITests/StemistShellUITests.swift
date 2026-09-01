@@ -249,7 +249,7 @@ final class StemistShellUITests: XCTestCase {
             XCTFail(
                 "Expected the same valid warm account deep link to reopen after its workspace closed."
                     + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
-                    + "\n\nRouting lifecycle probe: \(String(describing: lifecycleProbe.value))"
+                    + "\n\nRouting lifecycle probe: \(lifecycleProbeValue(lifecycleProbe))"
                     + "\n\nAccessibility hierarchy after replaying the warm deep link:\n\(app.debugDescription)"
             )
             return
@@ -585,7 +585,7 @@ final class StemistShellUITests: XCTestCase {
         let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
         return "Expected Safari to hand \(url.absoluteString) to Stemist."
             + "\n\nStemist state: \(app.state.rawValue)"
-            + "\n\nRouting lifecycle probe: \(String(describing: lifecycleProbe.value))"
+            + "\n\nRouting lifecycle probe: \(lifecycleProbeValue(lifecycleProbe))"
             + "\n\nStemist hierarchy:\n\(safeHierarchyDescription(for: app))"
             + "\n\nSafari hierarchy:\n\(safeHierarchyDescription(for: safari))"
             + "\n\nSpringBoard hierarchy:\n\(safeHierarchyDescription(for: springboard))"
@@ -597,5 +597,10 @@ final class StemistShellUITests: XCTestCase {
             return "<hierarchy unavailable; application state=\(state.rawValue)>"
         }
         return application.debugDescription
+    }
+
+    private func lifecycleProbeValue(_ probe: XCUIElement) -> String {
+        guard probe.exists else { return "<missing>" }
+        return String(describing: probe.value)
     }
 }

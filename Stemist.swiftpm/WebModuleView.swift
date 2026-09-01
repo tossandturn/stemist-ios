@@ -304,10 +304,11 @@ private enum CameraCaptureIntentScript {
             .trim();
         const isCameraInput = (element) => element instanceof HTMLInputElement
             && element.type === 'file'
-            && element.hasAttribute('capture');
+            && (element.hasAttribute('capture') || element.hasAttribute('data-camera-input'));
         const isCameraControl = (element) => {
             if (!(element instanceof Element)) return false;
             if (isCameraInput(element)) return true;
+            if (element.hasAttribute('data-camera-intent')) return true;
             if (!element.matches('button, [role="button"], label')) return false;
             return cameraLabel.test(textOf(element));
         };
