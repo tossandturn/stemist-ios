@@ -751,6 +751,18 @@ struct EmbeddedWebView: UIViewRepresentable {
             return nil
         }
 
+        @available(iOS 13.0, *)
+        func webView(
+            _ webView: WKWebView,
+            contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo,
+            completionHandler: @escaping (UIContextMenuConfiguration?) -> Void
+        ) {
+            // Product actions have their own native/web controls. Returning
+            // nil prevents a long Pencil press from opening WebKit's copy,
+            // lookup or link-preview menu over the drawing surface.
+            completionHandler(nil)
+        }
+
         func webView(
             _ webView: WKWebView,
             runJavaScriptAlertPanelWithMessage message: String,

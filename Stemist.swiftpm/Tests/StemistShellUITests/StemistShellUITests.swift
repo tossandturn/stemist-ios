@@ -245,7 +245,7 @@ final class StemistShellUITests: XCTestCase {
         let reopenedAccountModule = webModule("web-module-ielts-account")
         guard reopenedAccountModule.waitForExistence(timeout: 5) else {
             let root = app.otherElements["stemist-root"]
-            let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
+            let lifecycleProbe = app.buttons["tab-today"]
             XCTFail(
                 "Expected the same valid warm account deep link to reopen after its workspace closed."
                     + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
@@ -430,7 +430,7 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func openCustomURLFromSafari(_ url: URL) {
-        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
+        let lifecycleProbe = app.buttons["tab-today"]
         if app.state == .runningForeground {
             _ = lifecycleProbe.waitForExistence(timeout: 3)
         }
@@ -520,7 +520,7 @@ final class StemistShellUITests: XCTestCase {
         let springboardButton = springboard.buttons.matching(promptPredicate).firstMatch
         let safariButton = safari.buttons.matching(promptPredicate).firstMatch
         let root = app.otherElements["stemist-root"]
-        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
+        let lifecycleProbe = app.buttons["tab-today"]
         let deadline = Date().addingTimeInterval(timeout)
         var didTapOpenPrompt = false
         var didObserveSafariForeground = false
@@ -582,7 +582,7 @@ final class StemistShellUITests: XCTestCase {
         url: URL
     ) -> String {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
+        let lifecycleProbe = app.buttons["tab-today"]
         return "Expected Safari to hand \(url.absoluteString) to Stemist."
             + "\n\nStemist state: \(app.state.rawValue)"
             + "\n\nRouting lifecycle probe: \(lifecycleProbeValue(lifecycleProbe))"

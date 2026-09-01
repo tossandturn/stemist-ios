@@ -171,10 +171,9 @@ assert.match(
 )
 assert.match(
   contentView,
-  /RoutingLifecycleProbe\([\s\S]{0,260}?routeCoordinator\.lifecycleRevision[\s\S]{0,220}?webWorkspace\.lifecycleRevision/,
-  'all builds must expose a dedicated monotonic lifecycle probe because root accessibility containers may return an empty value'
+  /accessibilityIdentifier\("tab-today"\)[\s\S]{0,220}?accessibilityValue\("\\\(routeCoordinator\.lifecycleRevision\)\|\\\(webWorkspace\.lifecycleRevision\)"\)/,
+  'the stable Today tab must expose a monotonic lifecycle token because root accessibility containers may return an empty value'
 )
-assert.match(contentView, /accessibilityIdentifier\s*=\s*"stemist-routing-lifecycle"/, 'the lifecycle probe must retain a stable UI-test identifier')
 assert.doesNotMatch(
   contentView,
   /scenePhase/,
@@ -639,8 +638,8 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /stemist-routing-lifecycle/,
-  'custom-scheme handoff tests must read the dedicated routing lifecycle probe'
+  /let\s+lifecycleProbe\s*=\s*app\.buttons\["tab-today"\]/,
+  'custom-scheme handoff tests must read the stable Today-tab lifecycle token'
 )
 assert.doesNotMatch(
   shellUITests,
@@ -760,6 +759,8 @@ assert.doesNotMatch(webModule, /stemistWebGoBack|stemistWebGoForward/, 'global n
 assert.match(webModule, /static let websiteDataStore\s*=\s*WKWebsiteDataStore\.default\(\)/, 'SSO needs one persistent WebKit data store')
 assert.match(webModule, /websiteDataStore\s*=\s*WebViewEnvironment\.websiteDataStore/, 'every product page must use the shared persistent WebKit data store')
 assert.match(webModule, /WKUIDelegate/, 'WebKit UI delegate is required for upload and media flows')
+assert.match(webModule, /contextMenuConfigurationForElement/, 'WebKit context menus must not cover Pencil writing with copy or lookup actions')
+assert.match(webModule, /contextMenuConfigurationForElement[\s\S]{0,420}?completionHandler\(nil\)/, 'the native WebView must explicitly suppress its contextual menu')
 assert.match(webModule, /runJavaScriptAlertPanelWithMessage/, 'web alert dialogs must complete on iPad')
 assert.match(webModule, /runJavaScriptConfirmPanelWithMessage/, 'web confirm dialogs must complete on iPad')
 assert.match(webModule, /runJavaScriptTextInputPanelWithPrompt/, 'web prompt dialogs must complete on iPad')

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 #if DEBUG
 import os
@@ -139,24 +138,6 @@ private struct WebWorkspaceChrome: View {
     }
 }
 
-private struct RoutingLifecycleProbe: UIViewRepresentable {
-    let value: String
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
-        view.isAccessibilityElement = true
-        view.accessibilityIdentifier = "stemist-routing-lifecycle"
-        view.accessibilityLabel = "Routing lifecycle"
-        view.isUserInteractionEnabled = false
-        view.backgroundColor = .clear
-        return view
-    }
-
-    func updateUIView(_ view: UIView, context: Context) {
-        view.accessibilityValue = value
-    }
-}
-
 @MainActor
 private struct WebWorkspaceHost: View {
     let launch: WebRouteLaunch
@@ -264,6 +245,7 @@ struct ContentView: View {
                         Label("Today", systemImage: "house")
                             .accessibilityElement(children: .ignore)
                             .accessibilityIdentifier("tab-today")
+                            .accessibilityValue("\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)")
                     }
                     .tag(AppTab.today)
                     .accessibilityIdentifier("tab-today-content")
@@ -352,14 +334,6 @@ struct ContentView: View {
                 .accessibilityAddTraits(.isModal)
             }
 
-            // Keep a small, explicit lifecycle probe for UI tests and support
-            // diagnostics. SwiftUI's accessibility container can expose the
-            // root value as empty, so deep-link tests observe this dedicated
-            // monotonic token rather than infer a handoff from foreground state.
-            RoutingLifecycleProbe(
-                value: "\(routeCoordinator.lifecycleRevision)|\(webWorkspace.lifecycleRevision)"
-            )
-            .allowsHitTesting(false)
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
