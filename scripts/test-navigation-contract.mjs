@@ -171,9 +171,10 @@ assert.match(
 )
 assert.match(
   contentView,
-  /stemist-routing-lifecycle[\s\S]{0,360}?routeCoordinator\.lifecycleRevision[\s\S]{0,220}?webWorkspace\.lifecycleRevision/,
+  /RoutingLifecycleProbe\([\s\S]{0,260}?routeCoordinator\.lifecycleRevision[\s\S]{0,220}?webWorkspace\.lifecycleRevision/,
   'all builds must expose a dedicated monotonic lifecycle probe because root accessibility containers may return an empty value'
 )
+assert.match(contentView, /accessibilityIdentifier\s*=\s*"stemist-routing-lifecycle"/, 'the lifecycle probe must retain a stable UI-test identifier')
 assert.doesNotMatch(
   contentView,
   /scenePhase/,
