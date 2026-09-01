@@ -169,6 +169,11 @@ assert.match(
   /accessibilityIdentifier\("stemist-root"\)[\s\S]{0,220}?#if DEBUG[\s\S]{0,260}?accessibilityValue\("\\\(routeCoordinator\.debugSnapshot\) \| \\\(webWorkspace\.debugSnapshot\)"\)/,
   'the root accessibility element must expose routing diagnostics to the iPad UI suite'
 )
+assert.match(
+  contentView,
+  /stemist-routing-lifecycle[\s\S]{0,320}?routeCoordinator\.debugSnapshot[\s\S]{0,220}?webWorkspace\.debugSnapshot/,
+  'debug builds must expose a dedicated lifecycle probe because root accessibility containers may return an empty value'
+)
 assert.doesNotMatch(
   contentView,
   /scenePhase/,
@@ -608,6 +613,11 @@ assert.match(
 )
 assert.match(
   shellUITests,
+  /addressField\.tap\(\)[\s\S]{0,420}?safari\.typeKey\(\s*["']a["']\s*,\s*modifierFlags:\s*\.command\s*\)[\s\S]{0,220}?safari\.typeText\(url\.absoluteString\)/,
+  'each Safari custom-scheme attempt must replace the existing address instead of appending to the previous URL'
+)
+assert.match(
+  shellUITests,
   /SearchFieldItemView[\s\S]{0,260}?\.firstMatch/,
   'Safari address input must prefer the stable focused search-field identifier over duplicate accessibility labels'
 )
@@ -623,12 +633,22 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /private func waitForStemistHandoff[\s\S]{0,1200}?let\s+root\s*=\s*app\.otherElements\["stemist-root"\][\s\S]{0,700}?app\.state\s*==\s*\.runningForeground,\s*root\.exists/,
-  'custom-scheme handoff is complete only after Stemist is foreground and its root has mounted'
+  /private func waitForStemistHandoff[\s\S]{0,1800}?previousLifecycleValue[\s\S]{0,1800}?didObserveSafariForeground[\s\S]{0,1800}?didObserveStemistBackground[\s\S]{0,1800}?lifecycleChanged[\s\S]{0,500}?app\.state\s*==\s*\.runningForeground[\s\S]{0,220}?root\.exists/,
+  'custom-scheme handoff must observe a new Safari-to-Stemist lifecycle and token, not just an already-foreground app'
 )
 assert.match(
   shellUITests,
-  /goButton\.tap\(\)[\s\S]{0,260}?waitForStemistHandoff\(from:\s*safari\)/,
+  /stemist-routing-lifecycle/,
+  'custom-scheme handoff tests must read the dedicated routing lifecycle probe'
+)
+assert.doesNotMatch(
+  shellUITests,
+  /if\s+app\.state\s*==\s*\.runningForeground,\s*root\.exists\s*\{\s*return\s+true\s*\}/,
+  'custom-scheme handoff must not return early from a stale foreground state'
+)
+assert.match(
+  shellUITests,
+  /goButton\.tap\(\)[\s\S]{0,320}?waitForStemistHandoff\(from:\s*safari,\s*previousLifecycleValue:\s*previousLifecycleValue\)/,
   'submitting the Safari URL must wait for the app handoff instead of returning after the prompt tap'
 )
 assert.doesNotMatch(
@@ -638,7 +658,7 @@ assert.doesNotMatch(
 )
 assert.match(
   shellUITests,
-  /var\s+didTapOpenPrompt\s*=\s*false[\s\S]{0,900}?if\s+!didTapOpenPrompt\s*\{[\s\S]{0,700}?promptButton\.tap\(\)[\s\S]{0,160}?didTapOpenPrompt\s*=\s*true/,
+  /var\s+didTapOpenPrompt\s*=\s*false[\s\S]{0,1400}?if\s+!didTapOpenPrompt\s*\{[\s\S]{0,1200}?promptButton\.tap\(\)[\s\S]{0,300}?didTapOpenPrompt\s*=\s*true/,
   'custom-scheme handoff must stop querying Safari and SpringBoard prompt elements after the first successful tap'
 )
 assert.match(

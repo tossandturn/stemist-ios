@@ -245,9 +245,11 @@ final class StemistShellUITests: XCTestCase {
         let reopenedAccountModule = webModule("web-module-ielts-account")
         guard reopenedAccountModule.waitForExistence(timeout: 5) else {
             let root = app.otherElements["stemist-root"]
+            let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
             XCTFail(
                 "Expected the same valid warm account deep link to reopen after its workspace closed."
                     + "\n\nRoot lifecycle diagnostics: \(String(describing: root.value))"
+                    + "\n\nRouting lifecycle probe: \(String(describing: lifecycleProbe.value))"
                     + "\n\nAccessibility hierarchy after replaying the warm deep link:\n\(app.debugDescription)"
             )
             return
@@ -428,6 +430,11 @@ final class StemistShellUITests: XCTestCase {
     }
 
     private func openCustomURLFromSafari(_ url: URL) {
+        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
+        if app.state == .runningForeground {
+            _ = lifecycleProbe.waitForExistence(timeout: 3)
+        }
+        let previousLifecycleValue = lifecycleProbe.exists ? lifecycleProbe.value as? String : nil
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         safari.launch()
 
@@ -439,6 +446,10 @@ final class StemistShellUITests: XCTestCase {
         guard addressField.exists else { return }
 
         addressField.tap()
+        // Safari can retain the previous custom URL after a warm handoff.
+        // Replace the focused address contents rather than appending a second
+        // scheme, which would never reach the application delegate.
+        safari.typeKey("a", modifierFlags: .command)
         // Safari exposes duplicate Address text fields after focus on iPadOS.
         // Send text to the focused application instead of re-resolving the
         // now-ambiguous address-field query.
@@ -453,7 +464,7 @@ final class StemistShellUITests: XCTestCase {
             if goButton.waitForExistence(timeout: 1) {
                 goButton.tap()
                 XCTAssertTrue(
-                    waitForStemistHandoff(from: safari),
+                    waitForStemistHandoff(from: safari, previousLifecycleValue: previousLifecycleValue),
                     customURLHandoffFailureDescription(safari: safari, url: url)
                 )
                 return
@@ -462,7 +473,7 @@ final class StemistShellUITests: XCTestCase {
 
         safari.typeText("\n")
         XCTAssertTrue(
-            waitForStemistHandoff(from: safari),
+            waitForStemistHandoff(from: safari, previousLifecycleValue: previousLifecycleValue),
             customURLHandoffFailureDescription(safari: safari, url: url)
         )
     }
@@ -500,6 +511,7 @@ final class StemistShellUITests: XCTestCase {
 
     private func waitForStemistHandoff(
         from safari: XCUIApplication,
+        previousLifecycleValue: String?,
         timeout: TimeInterval = 12
     ) -> Bool {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -508,11 +520,33 @@ final class StemistShellUITests: XCTestCase {
         let springboardButton = springboard.buttons.matching(promptPredicate).firstMatch
         let safariButton = safari.buttons.matching(promptPredicate).firstMatch
         let root = app.otherElements["stemist-root"]
+        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
         let deadline = Date().addingTimeInterval(timeout)
         var didTapOpenPrompt = false
+        var didObserveSafariForeground = false
+        var didObserveStemistBackground = app.state != .runningForeground
 
         while Date() < deadline {
-            if app.state == .runningForeground, root.exists {
+            if safari.state == .runningForeground {
+                didObserveSafariForeground = true
+            }
+            if app.state != .runningForeground {
+                didObserveStemistBackground = true
+            }
+
+            let currentLifecycleValue = lifecycleProbe.exists ? lifecycleProbe.value as? String : nil
+            let lifecycleChanged: Bool
+            if let previousLifecycleValue {
+                lifecycleChanged = currentLifecycleValue != previousLifecycleValue
+            } else {
+                lifecycleChanged = currentLifecycleValue != nil
+            }
+
+            if didObserveSafariForeground,
+               didObserveStemistBackground,
+               app.state == .runningForeground,
+               root.exists,
+               lifecycleChanged {
                 return true
             }
 
@@ -529,7 +563,18 @@ final class StemistShellUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
 
-        return app.state == .runningForeground && root.exists
+        let currentLifecycleValue = lifecycleProbe.exists ? lifecycleProbe.value as? String : nil
+        let lifecycleChanged: Bool
+        if let previousLifecycleValue {
+            lifecycleChanged = currentLifecycleValue != previousLifecycleValue
+        } else {
+            lifecycleChanged = currentLifecycleValue != nil
+        }
+        return didObserveSafariForeground
+            && didObserveStemistBackground
+            && app.state == .runningForeground
+            && root.exists
+            && lifecycleChanged
     }
 
     private func customURLHandoffFailureDescription(
@@ -537,8 +582,10 @@ final class StemistShellUITests: XCTestCase {
         url: URL
     ) -> String {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let lifecycleProbe = app.descendants(matching: .any)["stemist-routing-lifecycle"]
         return "Expected Safari to hand \(url.absoluteString) to Stemist."
             + "\n\nStemist state: \(app.state.rawValue)"
+            + "\n\nRouting lifecycle probe: \(String(describing: lifecycleProbe.value))"
             + "\n\nStemist hierarchy:\n\(safeHierarchyDescription(for: app))"
             + "\n\nSafari hierarchy:\n\(safeHierarchyDescription(for: safari))"
             + "\n\nSpringBoard hierarchy:\n\(safeHierarchyDescription(for: springboard))"

@@ -325,6 +325,21 @@ struct ContentView: View {
                 .zIndex(10)
                 .accessibilityAddTraits(.isModal)
             }
+
+#if DEBUG
+            // Keep a small, explicit lifecycle probe for UI tests. SwiftUI's
+            // accessibility container can expose the root value as empty even
+            // when its value changes, so the deep-link test must observe a
+            // dedicated token rather than infer a handoff from foreground state.
+            Text("Routing lifecycle")
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("stemist-routing-lifecycle")
+                .accessibilityLabel("Routing lifecycle")
+                .accessibilityValue("\(routeCoordinator.debugSnapshot) | \(webWorkspace.debugSnapshot)")
+#endif
         }
         .tint(StemistTheme.brand)
         .environment(\.stemistAllowsAccountEntry, configuration.showsAccountEntry)
