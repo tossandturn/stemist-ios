@@ -427,6 +427,15 @@ private enum CameraCaptureIntentScript {
             if (!element.matches('button, [role="button"], label')) return false;
             return cameraLabel.test(textOf(element));
         };
+        const recordCameraIntent = () => {
+            // This runs in the capture phase, before React opens the hidden
+            // file input. The native panel delegate can read this marker if
+            // the WKScriptMessage arrives one run-loop turn too late.
+            window.__stemistCameraIntentAt = Date.now();
+            try {
+                handler.postMessage({ kind: 'camera' });
+            } catch (_) {}
+        };
         document.addEventListener('click', (event) => {
             if (!(event.target instanceof Element)) return;
             const candidates = [
@@ -435,9 +444,7 @@ private enum CameraCaptureIntentScript {
                 event.target.closest('label')
             ].filter(Boolean);
             if (!candidates.some(isCameraControl)) return;
-            try {
-                handler.postMessage({ kind: 'camera' });
-            } catch (_) {}
+            recordCameraIntent();
         }, true);
     })();
     """
@@ -1224,12 +1231,29 @@ struct EmbeddedWebView: UIViewRepresentable {
         ) {
             fileUploadCompletion?(nil)
             fileUploadCompletion = completionHandler
+            let allowsMultipleSelection = parameters.allowsMultipleSelection
 
-            if consumeCameraCaptureIntent() {
-                presentCameraCapture(in: webView)
-                return
+            resolveCameraCaptureIntent(in: webView) { [weak self, weak webView] useCamera in
+                guard let self else { return }
+                guard let webView else {
+                    self.finishFileUpload(with: nil)
+                    return
+                }
+                if useCamera {
+                    self.presentCameraCapture(in: webView)
+                } else {
+                    self.presentDocumentPicker(
+                        allowsMultipleSelection: allowsMultipleSelection,
+                        in: webView
+                    )
+                }
             }
+        }
 
+        private func presentDocumentPicker(
+            allowsMultipleSelection: Bool,
+            in webView: WKWebView
+        ) {
             let picker = UIDocumentPickerViewController(
                 forOpeningContentTypes: [
                     UTType.item,
@@ -1242,7 +1266,7 @@ struct EmbeddedWebView: UIViewRepresentable {
                 ],
                 asCopy: true
             )
-            picker.allowsMultipleSelection = parameters.allowsMultipleSelection
+            picker.allowsMultipleSelection = allowsMultipleSelection
             picker.delegate = self
 
             guard let presenter = presentingViewController(for: webView) else {
@@ -1276,6 +1300,34 @@ struct EmbeddedWebView: UIViewRepresentable {
             defer { cameraCaptureIntentDeadline = nil }
             guard let deadline = cameraCaptureIntentDeadline else { return false }
             return deadline > Date()
+        }
+
+        private func resolveCameraCaptureIntent(
+            in webView: WKWebView,
+            completion: @escaping (Bool) -> Void
+        ) {
+            if consumeCameraCaptureIntent() {
+                webView.evaluateJavaScript("window.__stemistCameraIntentAt = 0;", completionHandler: nil)
+                completion(true)
+                return
+            }
+
+            // The capture-phase JavaScript marker is synchronous, whereas
+            // WKScriptMessage delivery is not guaranteed to beat the file
+            // input's panel request. Consume a fresh marker exactly once.
+            webView.evaluateJavaScript(
+                """
+                (() => {
+                    const timestamp = Number(window.__stemistCameraIntentAt || 0);
+                    const age = Date.now() - timestamp;
+                    const fresh = Number.isFinite(timestamp) && age >= 0 && age < 2_000;
+                    if (fresh) window.__stemistCameraIntentAt = 0;
+                    return fresh;
+                })();
+                """
+            ) { result, _ in
+                completion(result as? Bool ?? false)
+            }
         }
 
         private func presentCameraCapture(in webView: WKWebView) {
