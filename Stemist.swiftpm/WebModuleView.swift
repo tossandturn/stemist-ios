@@ -374,6 +374,8 @@ private enum NativePencilSurfaceScript {
             });
             window.addEventListener('resize', schedule, { passive: true });
             window.addEventListener('scroll', schedule, { capture: true, passive: true });
+            window.visualViewport?.addEventListener('resize', schedule, { passive: true });
+            window.visualViewport?.addEventListener('scroll', schedule, { passive: true });
             schedule();
         };
         if (document.readyState === 'loading') {
@@ -733,42 +735,43 @@ private final class NativePencilSurfaceOverlay: UIView {
         return canvasView
     }
 
-    func consumeLatestStroke() -> Stroke? {
+    func consumePendingStrokes() -> [Stroke] {
         guard let activeSurface,
-              let stroke = canvasView.drawing.strokes.last else {
+              !canvasView.drawing.strokes.isEmpty else {
             canvasView.drawing = PKDrawing()
-            return nil
+            return []
         }
 
-        let path = stroke.path
-        guard path.count > 0 else {
-            canvasView.drawing = PKDrawing()
-            return nil
-        }
+        let pending = canvasView.drawing.strokes.compactMap { stroke -> Stroke? in
+            let path = stroke.path
+            guard path.count > 0 else { return nil }
 
-        var points: [[String: Any]] = []
-        points.reserveCapacity(path.count)
-        for index in 0..<path.count {
-            let point = path[index]
-            let localLocation = point.location.applying(stroke.transform)
-            // The web bridge consumes viewport coordinates from
-            // getBoundingClientRect(). Convert out of PencilKit's canvas
-            // coordinate space explicitly so future layout/transform changes
-            // cannot silently shift the ink relative to the DOM canvas.
-            let location = canvasView.convert(localLocation, to: self)
-            points.append([
-                "x": Double(location.x),
-                "y": Double(location.y),
-                "pressure": Double(point.force),
-            ])
+            var points: [[String: Any]] = []
+            points.reserveCapacity(path.count)
+            for index in 0..<path.count {
+                let point = path[index]
+                let localLocation = point.location.applying(stroke.transform)
+                // The web bridge consumes viewport coordinates from
+                // getBoundingClientRect(). Convert out of PencilKit's canvas
+                // coordinate space explicitly so future layout/transform
+                // changes cannot silently shift the ink relative to the DOM.
+                let location = canvasView.convert(localLocation, to: self)
+                points.append([
+                    "x": Double(location.x),
+                    "y": Double(location.y),
+                    "pressure": Double(point.force),
+                ])
+            }
+            guard !points.isEmpty else { return nil }
+            return Stroke(
+                surfaceID: activeSurface.id,
+                surfaceFrame: activeSurface.frame,
+                tool: activeSurface.tool,
+                points: points
+            )
         }
         canvasView.drawing = PKDrawing()
-        return Stroke(
-            surfaceID: activeSurface.id,
-            surfaceFrame: activeSurface.frame,
-            tool: activeSurface.tool,
-            points: points
-        )
+        return pending
     }
 }
 
@@ -966,29 +969,37 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func forwardLatestPencilStroke() {
             guard let webView = store.webView,
-                  let stroke = pencilOverlay?.consumeLatestStroke(),
-                  !stroke.points.isEmpty,
-                  let payloadData = try? JSONSerialization.data(
-                      withJSONObject: [
-                          "surfaceId": stroke.surfaceID,
-                          "coordinateSpace": "webViewViewport",
-                          "surfaceFrame": [
-                              "x": Double(stroke.surfaceFrame.origin.x),
-                              "y": Double(stroke.surfaceFrame.origin.y),
-                              "width": Double(stroke.surfaceFrame.size.width),
-                              "height": Double(stroke.surfaceFrame.size.height),
-                          ],
-                          "tool": stroke.tool,
-                          "points": stroke.points,
-                      ],
-                      options: []
-                  ),
-                  let payload = String(data: payloadData, encoding: .utf8) else {
+                  let strokes = pencilOverlay?.consumePendingStrokes(),
+                  !strokes.isEmpty else {
                 return
             }
 
-            let script = "window.dispatchEvent(new CustomEvent('stemist-native-pencil-stroke',{detail:\(payload)}));"
-            webView.evaluateJavaScript(script, completionHandler: nil)
+            // A fast lift-and-repress can leave more than one PKStroke in the
+            // canvas before the async touch callback runs. Send each stroke
+            // separately so the web ink model never draws a false segment
+            // between two independent strokes.
+            for stroke in strokes {
+                guard let payloadData = try? JSONSerialization.data(
+                    withJSONObject: [
+                        "surfaceId": stroke.surfaceID,
+                        "coordinateSpace": "webViewViewport",
+                        "surfaceFrame": [
+                            "x": Double(stroke.surfaceFrame.origin.x),
+                            "y": Double(stroke.surfaceFrame.origin.y),
+                            "width": Double(stroke.surfaceFrame.size.width),
+                            "height": Double(stroke.surfaceFrame.size.height),
+                        ],
+                        "tool": stroke.tool,
+                        "points": stroke.points,
+                    ],
+                    options: []
+                ),
+                let payload = String(data: payloadData, encoding: .utf8) else {
+                    continue
+                }
+                let script = "window.dispatchEvent(new CustomEvent('stemist-native-pencil-stroke',{detail:\(payload)}));"
+                webView.evaluateJavaScript(script, completionHandler: nil)
+            }
         }
 
         private func restartLoadWatchdog() {
