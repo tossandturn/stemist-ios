@@ -3,9 +3,12 @@ name: iOS Simulator Build
 on:
   push:
     branches:
-      - main
-      - agent/ios-navigation-shell
-  pull_request:
+      - "**"
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
   # Keep push and pull-request validation independent. A PR check must not
@@ -23,6 +26,13 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Verify Xcode toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$DEVELOPER_DIR/usr/bin/xcodebuild"
+          xcodebuild -version
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
