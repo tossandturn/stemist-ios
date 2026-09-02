@@ -246,6 +246,7 @@ assert.doesNotMatch(
   'the root workspace must not call a removed modal queue implementation'
 )
 assert.match(webModule, /func\s+updateUIView\(_\s+webView:\s*WKWebView[\s\S]{0,500}?requestedURL\s*!=\s*url[\s\S]{0,240}?load\(url,\s*in:\s*webView\)/, 'route changes must update the resident WKWebView instead of rebuilding it')
+assert.doesNotMatch(contentView, /WebModuleView\([\s\S]{0,320}?\.id\(launch\.id\)/, 'in-place route changes must not recreate the resident WebModuleView and WKWebView')
 assert.match(
   webModule,
   /let\s+dismissWorkspace:\s*\(\)\s*->\s*Void/,
@@ -903,6 +904,9 @@ assert.match(webModule, /-webkit-touch-callout:\s*none/, 'drawing surfaces must 
 assert.match(webModule, /touch-action:\s*none/, 'drawing surfaces must retain pen pointer ownership')
 assert.match(webModule, /const scrollSelector = ['"]\.pdf-canvas-scroll/, 'PDF scrolling must have an explicit native touch-action policy')
 assert.match(webModule, /const activePenPointers = new Set\(\)/, 'Pencil selection suppression must be scoped to active Pencil pointers')
+assert.match(webModule, /const isEditableTarget = /, 'global selection suppression must preserve editable controls')
+assert.match(webModule, /const clearReadOnlySelection = /, 'non-editable WebView text must clear system selection handles')
+assert.match(webModule, /document\.addEventListener\('selectionchange', clearReadOnlySelection, true\)/, 'system text selection must be suppressed outside editable controls')
 assert.doesNotMatch(webModule, /const drawingSelector = \[[\s\S]{0,160}['"]canvas['"]\s*,/, 'selection protection must not apply touch-action:none to every PDF base canvas')
 assert.match(webModule, /pointerType\s*!==\s*['"]pen['"]/, 'pen pointer capture must stay scoped to Apple Pencil input')
 assert.match(webModule, /CameraCaptureIntentScript/, 'Take photo must have an explicit native camera intent bridge')

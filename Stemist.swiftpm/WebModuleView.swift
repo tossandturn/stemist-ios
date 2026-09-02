@@ -292,6 +292,22 @@ private enum PenInputBehaviorScript {
             if (!activePenPointers.size) return;
             try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
         };
+        // WKWebView may still create the blue iPad text-selection handles on
+        // surrounding labels while a student is writing. Clear selections from
+        // read-only page content, but keep native text selection intact in
+        // answer inputs and other editable controls for accessibility.
+        const isEditableTarget = (node) => {
+            const element = node instanceof Element ? node : node?.parentElement;
+            return Boolean(element?.closest(
+                'input, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"], [role="textbox"]'
+            ));
+        };
+        const clearReadOnlySelection = () => {
+            const selection = window.getSelection?.();
+            if (!selection || selection.isCollapsed) return;
+            if (isEditableTarget(selection.anchorNode) || isEditableTarget(selection.focusNode)) return;
+            try { selection.removeAllRanges(); } catch (_) {}
+        };
 
         const observeDocument = () => {
             const root = document.documentElement;
@@ -311,6 +327,7 @@ private enum PenInputBehaviorScript {
         document.addEventListener('pointerup', releasePen, true);
         document.addEventListener('pointercancel', releasePen, true);
         document.addEventListener('selectionchange', clearPenSelection, true);
+        document.addEventListener('selectionchange', clearReadOnlySelection, true);
         if (document.documentElement) {
             observeDocument();
         } else {

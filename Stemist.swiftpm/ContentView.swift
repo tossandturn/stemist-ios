@@ -162,7 +162,10 @@ private struct WebWorkspaceHost: View {
                 requestLaunch: requestLaunch,
                 dismissWorkspace: dismissWorkspace
             )
-            .id(launch.id)
+            // Keep this resident across in-place route changes. EmbeddedWebView
+            // reloads the new URL itself, preserving the WebKit process, its
+            // authenticated store and the native input bridge instead of
+            // introducing a visible teardown and cold-start pause.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear { onMount(launch) }
