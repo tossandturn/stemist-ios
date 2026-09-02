@@ -233,17 +233,14 @@ private enum PenInputBehaviorScript {
         // into a normal canvas; setting touch-action:none on that base layer
         // prevents a finger from panning the surrounding PDF scroller.
         const drawingSelector = [
-            '[data-ink-surface="handwriting"]',
-            '[data-ink-surface="pdf"]',
-            'canvas[data-drawing-surface]',
-            'canvas[data-handwriting-canvas]',
-            'canvas[data-answer-canvas]',
-            'canvas[data-input-mode="handwrite"]',
-            '.handwriting-pad__canvas',
-            '.pdf-ink-layer',
-            '.drawing-canvas',
-            '.handwriting-canvas',
-            '.signature-pad'
+            '[data-ink-surface="handwriting"][data-ink-interactive="true"]',
+            '[data-ink-surface="pdf"][data-ink-interactive="true"]',
+            'canvas[data-drawing-surface][data-ink-interactive="true"]',
+            'canvas[data-handwriting-canvas][data-ink-interactive="true"]',
+            'canvas[data-answer-canvas][data-ink-interactive="true"]',
+            'canvas[data-input-mode="handwrite"][data-ink-interactive="true"]',
+            'canvas.handwriting-pad__canvas[data-ink-interactive="true"]',
+            'canvas.pdf-ink-layer[data-ink-interactive="true"]'
         ].join(',');
         const scrollSelector = '.pdf-canvas-scroll, [data-pdf-scroll]';
         const activePenPointers = new Set();
@@ -330,12 +327,17 @@ private enum NativePencilSurfaceScript {
     (() => {
         const handler = window.webkit?.messageHandlers?.stemistPencilSurface;
         if (!handler) return;
+        // Fail closed when a page has only the legacy surface marker. Without
+        // an explicit ID and interaction state the WebView remains the owner
+        // of Pencil input, so the native overlay cannot swallow an unbridged
+        // stroke.
         const selector = '[data-ink-surface="handwriting"], [data-ink-surface="pdf"]';
         let frame = 0;
         const report = () => {
             frame = 0;
             const surfaces = [...document.querySelectorAll(selector)]
-                .filter((element) => element.dataset.inkInteractive === 'true')
+                .filter((element) => element.dataset.inkInteractive === 'true'
+                    && Boolean(element.dataset.inkSurfaceId))
                 .map((element) => {
                     const rect = element.getBoundingClientRect();
                     return {
@@ -645,6 +647,7 @@ private final class PencilStrokeCanvasView: PKCanvasView {
 private final class NativePencilSurfaceOverlay: UIView {
     struct Stroke {
         let surfaceID: String
+        let surfaceFrame: CGRect
         let tool: String
         let points: [[String: Any]]
     }
@@ -740,7 +743,12 @@ private final class NativePencilSurfaceOverlay: UIView {
         points.reserveCapacity(path.count)
         for index in 0..<path.count {
             let point = path[index]
-            let location = point.location.applying(stroke.transform)
+            let localLocation = point.location.applying(stroke.transform)
+            // The web bridge consumes viewport coordinates from
+            // getBoundingClientRect(). Convert out of PencilKit's canvas
+            // coordinate space explicitly so future layout/transform changes
+            // cannot silently shift the ink relative to the DOM canvas.
+            let location = canvasView.convert(localLocation, to: self)
             points.append([
                 "x": Double(location.x),
                 "y": Double(location.y),
@@ -748,7 +756,12 @@ private final class NativePencilSurfaceOverlay: UIView {
             ])
         }
         canvasView.drawing = PKDrawing()
-        return Stroke(surfaceID: activeSurface.id, tool: activeSurface.tool, points: points)
+        return Stroke(
+            surfaceID: activeSurface.id,
+            surfaceFrame: activeSurface.frame,
+            tool: activeSurface.tool,
+            points: points
+        )
     }
 }
 
@@ -951,6 +964,13 @@ struct EmbeddedWebView: UIViewRepresentable {
                   let payloadData = try? JSONSerialization.data(
                       withJSONObject: [
                           "surfaceId": stroke.surfaceID,
+                          "coordinateSpace": "webViewViewport",
+                          "surfaceFrame": [
+                              "x": Double(stroke.surfaceFrame.origin.x),
+                              "y": Double(stroke.surfaceFrame.origin.y),
+                              "width": Double(stroke.surfaceFrame.size.width),
+                              "height": Double(stroke.surfaceFrame.size.height),
+                          ],
                           "tool": stroke.tool,
                           "points": stroke.points,
                       ],
