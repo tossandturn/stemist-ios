@@ -844,6 +844,20 @@ enum WebRoute: Hashable, Identifiable {
         }
     }
 
+    /// Practice and paper routes use the native workspace chrome as their
+    /// navigation boundary. Hiding the WebView's browser bar keeps the
+    /// writing surface immersive while the top-level close control and the
+    /// module's own recovery UI remain available.
+    var showsBrowserNavigation: Bool {
+        switch self {
+        case .ieltsListening, .ieltsReading, .ieltsWriting, .ieltsSpeaking,
+             .stemIG, .stemAS, .stemA2, .stemTopics, .stemPastPapers, .stemNotebook:
+            false
+        default:
+            true
+        }
+    }
+
     var title: String {
         switch self {
         case .ieltsListening: "Listening"

@@ -229,18 +229,21 @@ private enum PenInputBehaviorScript {
         const host = window.location.hostname.toLowerCase();
         if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
         const handler = window.webkit?.messageHandlers?.stemistPenInput;
+        // Never match every canvas here. PDF.js renders the question paper
+        // into a normal canvas; setting touch-action:none on that base layer
+        // prevents a finger from panning the surrounding PDF scroller.
         const drawingSelector = [
-            'canvas',
-            '[data-drawing-surface]',
-            '[data-handwriting-canvas]',
-            '[data-answer-canvas]',
-            '[data-input-mode="handwrite"]',
-            '.handwriting-pad__canvas',
-            '.pdf-ink-layer',
-            '.drawing-canvas',
-            '.handwriting-canvas',
-            '.signature-pad'
+            '[data-ink-surface="handwriting"][data-ink-interactive="true"]',
+            '[data-ink-surface="pdf"][data-ink-interactive="true"]',
+            'canvas[data-drawing-surface][data-ink-interactive="true"]',
+            'canvas[data-handwriting-canvas][data-ink-interactive="true"]',
+            'canvas[data-answer-canvas][data-ink-interactive="true"]',
+            'canvas[data-input-mode="handwrite"][data-ink-interactive="true"]',
+            'canvas.handwriting-pad__canvas[data-ink-interactive="true"]',
+            'canvas.pdf-ink-layer[data-ink-interactive="true"]'
         ].join(',');
+        const scrollSelector = '.pdf-canvas-scroll, [data-pdf-scroll]';
+        const activePenPointers = new Set();
         const styleId = 'stemist-pen-input-behavior';
         const drawingTarget = (target) => {
             if (!(target instanceof Element)) return null;
@@ -257,24 +260,37 @@ private enum PenInputBehaviorScript {
                 + '  user-select: none !important;\\n'
                 + '  -webkit-touch-callout: none !important;\\n'
                 + '  touch-action: none !important;\\n'
+                + '}\\n'
+                // Explicitly restore native finger/trackpad panning for the
+                // PDF container while keeping its ink layer pointer-safe.
+                + `${scrollSelector} {\\n`
+                + '  touch-action: pan-x pan-y pinch-zoom !important;\\n'
+                + '  -webkit-overflow-scrolling: touch !important;\\n'
                 + '}';
             root.appendChild(style);
         };
         const blockSelection = (event) => {
-            if (drawingTarget(event.target)) event.preventDefault();
+            if (drawingTarget(event.target) || activePenPointers.size) event.preventDefault();
         };
         const notifyPenActivity = (active) => {
             try { handler?.postMessage({ active }); } catch (_) {}
         };
         const capturePen = (event) => {
             if (event.pointerType !== 'pen') return;
+            activePenPointers.add(event.pointerId);
             const target = drawingTarget(event.target);
             if (!target || typeof target.setPointerCapture !== 'function') return;
             notifyPenActivity(true);
             try { target.setPointerCapture(event.pointerId); } catch (_) {}
         };
         const releasePen = (event) => {
-            if (event.pointerType === 'pen') notifyPenActivity(false);
+            if (event.pointerType !== 'pen') return;
+            activePenPointers.delete(event.pointerId);
+            if (!activePenPointers.size) notifyPenActivity(false);
+        };
+        const clearPenSelection = () => {
+            if (!activePenPointers.size) return;
+            try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
         };
 
         const observeDocument = () => {
@@ -294,6 +310,7 @@ private enum PenInputBehaviorScript {
         document.addEventListener('pointerdown', capturePen, true);
         document.addEventListener('pointerup', releasePen, true);
         document.addEventListener('pointercancel', releasePen, true);
+        document.addEventListener('selectionchange', clearPenSelection, true);
         if (document.documentElement) {
             observeDocument();
         } else {
@@ -310,12 +327,17 @@ private enum NativePencilSurfaceScript {
     (() => {
         const handler = window.webkit?.messageHandlers?.stemistPencilSurface;
         if (!handler) return;
+        // Fail closed when a page has only the legacy surface marker. Without
+        // an explicit ID and interaction state the WebView remains the owner
+        // of Pencil input, so the native overlay cannot swallow an unbridged
+        // stroke.
         const selector = '[data-ink-surface="handwriting"], [data-ink-surface="pdf"]';
         let frame = 0;
         const report = () => {
             frame = 0;
             const surfaces = [...document.querySelectorAll(selector)]
-                .filter((element) => element.dataset.inkInteractive === 'true')
+                .filter((element) => element.dataset.inkInteractive === 'true'
+                    && Boolean(element.dataset.inkSurfaceId))
                 .map((element) => {
                     const rect = element.getBoundingClientRect();
                     return {
@@ -341,10 +363,19 @@ private enum NativePencilSurfaceScript {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ['data-ink-interactive', 'data-ink-tool', 'style', 'class']
+                attributeFilter: [
+                    'data-ink-surface',
+                    'data-ink-surface-id',
+                    'data-ink-interactive',
+                    'data-ink-tool',
+                    'style',
+                    'class'
+                ]
             });
             window.addEventListener('resize', schedule, { passive: true });
             window.addEventListener('scroll', schedule, { capture: true, passive: true });
+            window.visualViewport?.addEventListener('resize', schedule, { passive: true });
+            window.visualViewport?.addEventListener('scroll', schedule, { passive: true });
             schedule();
         };
         if (document.readyState === 'loading') {
@@ -522,7 +553,8 @@ struct WebModuleView: View {
                     }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack(spacing: 18) {
+                if route.showsBrowserNavigation {
+                    HStack(spacing: 18) {
                     Button {
                         webViewStore.goBack()
                     } label: {
@@ -563,10 +595,13 @@ struct WebModuleView: View {
                     .accessibilityLabel("Open current page in Safari")
                     .accessibilityIdentifier("web-safari")
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.bar)
-            }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.bar)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("web-browser-navigation")
+                    }
+                }
             .sheet(isPresented: $showsSafari) {
                 SafariView(url: currentURL ?? launchURL)
                     .ignoresSafeArea()
@@ -621,6 +656,7 @@ private final class PencilStrokeCanvasView: PKCanvasView {
 private final class NativePencilSurfaceOverlay: UIView {
     struct Stroke {
         let surfaceID: String
+        let surfaceFrame: CGRect
         let tool: String
         let points: [[String: Any]]
     }
@@ -699,32 +735,43 @@ private final class NativePencilSurfaceOverlay: UIView {
         return canvasView
     }
 
-    func consumeLatestStroke() -> Stroke? {
+    func consumePendingStrokes() -> [Stroke] {
         guard let activeSurface,
-              let stroke = canvasView.drawing.strokes.last else {
+              !canvasView.drawing.strokes.isEmpty else {
             canvasView.drawing = PKDrawing()
-            return nil
+            return []
         }
 
-        let path = stroke.path
-        guard path.count > 0 else {
-            canvasView.drawing = PKDrawing()
-            return nil
-        }
+        let pending = canvasView.drawing.strokes.compactMap { stroke -> Stroke? in
+            let path = stroke.path
+            guard path.count > 0 else { return nil }
 
-        var points: [[String: Any]] = []
-        points.reserveCapacity(path.count)
-        for index in 0..<path.count {
-            let point = path[index]
-            let location = point.location.applying(stroke.transform)
-            points.append([
-                "x": Double(location.x),
-                "y": Double(location.y),
-                "pressure": Double(point.force),
-            ])
+            var points: [[String: Any]] = []
+            points.reserveCapacity(path.count)
+            for index in 0..<path.count {
+                let point = path[index]
+                let localLocation = point.location.applying(stroke.transform)
+                // The web bridge consumes viewport coordinates from
+                // getBoundingClientRect(). Convert out of PencilKit's canvas
+                // coordinate space explicitly so future layout/transform
+                // changes cannot silently shift the ink relative to the DOM.
+                let location = canvasView.convert(localLocation, to: self)
+                points.append([
+                    "x": Double(location.x),
+                    "y": Double(location.y),
+                    "pressure": Double(point.force),
+                ])
+            }
+            guard !points.isEmpty else { return nil }
+            return Stroke(
+                surfaceID: activeSurface.id,
+                surfaceFrame: activeSurface.frame,
+                tool: activeSurface.tool,
+                points: points
+            )
         }
         canvasView.drawing = PKDrawing()
-        return Stroke(surfaceID: activeSurface.id, tool: activeSurface.tool, points: points)
+        return pending
     }
 }
 
@@ -922,22 +969,37 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         func forwardLatestPencilStroke() {
             guard let webView = store.webView,
-                  let stroke = pencilOverlay?.consumeLatestStroke(),
-                  !stroke.points.isEmpty,
-                  let payloadData = try? JSONSerialization.data(
-                      withJSONObject: [
-                          "surfaceId": stroke.surfaceID,
-                          "tool": stroke.tool,
-                          "points": stroke.points,
-                      ],
-                      options: []
-                  ),
-                  let payload = String(data: payloadData, encoding: .utf8) else {
+                  let strokes = pencilOverlay?.consumePendingStrokes(),
+                  !strokes.isEmpty else {
                 return
             }
 
-            let script = "window.dispatchEvent(new CustomEvent('stemist-native-pencil-stroke',{detail:\(payload)}));"
-            webView.evaluateJavaScript(script, completionHandler: nil)
+            // A fast lift-and-repress can leave more than one PKStroke in the
+            // canvas before the async touch callback runs. Send each stroke
+            // separately so the web ink model never draws a false segment
+            // between two independent strokes.
+            for stroke in strokes {
+                guard let payloadData = try? JSONSerialization.data(
+                    withJSONObject: [
+                        "surfaceId": stroke.surfaceID,
+                        "coordinateSpace": "webViewViewport",
+                        "surfaceFrame": [
+                            "x": Double(stroke.surfaceFrame.origin.x),
+                            "y": Double(stroke.surfaceFrame.origin.y),
+                            "width": Double(stroke.surfaceFrame.size.width),
+                            "height": Double(stroke.surfaceFrame.size.height),
+                        ],
+                        "tool": stroke.tool,
+                        "points": stroke.points,
+                    ],
+                    options: []
+                ),
+                let payload = String(data: payloadData, encoding: .utf8) else {
+                    continue
+                }
+                let script = "window.dispatchEvent(new CustomEvent('stemist-native-pencil-stroke',{detail:\(payload)}));"
+                webView.evaluateJavaScript(script, completionHandler: nil)
+            }
         }
 
         private func restartLoadWatchdog() {

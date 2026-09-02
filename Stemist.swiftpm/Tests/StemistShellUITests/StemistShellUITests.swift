@@ -349,7 +349,30 @@ final class StemistShellUITests: XCTestCase {
             return
         }
         attachScreenshot(named: "\(moduleIdentifier)-opened")
+        assertBrowserNavigationVisibility(for: moduleIdentifier)
         closeWebModule(module, named: moduleIdentifier)
+    }
+
+    private func assertBrowserNavigationVisibility(for moduleIdentifier: String) {
+        let browserNavigation = app.otherElements["web-browser-navigation"]
+        let immersiveModuleIDs: Set<String> = [
+            "web-module-ielts-listening", "web-module-ielts-reading",
+            "web-module-ielts-writing", "web-module-ielts-speaking",
+            "web-module-stem-ig", "web-module-stem-as", "web-module-stem-a2",
+            "web-module-stem-topics", "web-module-stem-past-papers",
+            "web-module-stem-notebook",
+        ]
+        if immersiveModuleIDs.contains(moduleIdentifier) {
+            XCTAssertFalse(
+                browserNavigation.exists,
+                "Practice/paper route \(moduleIdentifier) should hide the browser navigation bar."
+            )
+        } else {
+            XCTAssertTrue(
+                browserNavigation.waitForExistence(timeout: 2),
+                "Non-immersive route \(moduleIdentifier) should retain browser recovery navigation."
+            )
+        }
     }
 
     private func webModule(_ identifier: String) -> XCUIElement {
