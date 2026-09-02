@@ -1402,6 +1402,24 @@ struct EmbeddedWebView: UIViewRepresentable {
             presenter.present(alert, animated: true)
         }
 
+        private func presentCameraAttachmentFailure() {
+            guard let webView = store.webView,
+                  let presenter = presentingViewController(for: webView),
+                  !(presenter is UIAlertController),
+                  !(presenter is UIDocumentPickerViewController),
+                  !(presenter is UIImagePickerController) else {
+                return
+            }
+
+            let alert = UIAlertController(
+                title: "Photo could not be attached",
+                message: "The photo was captured but could not be prepared for AI Coach. Try Take photo again or choose Upload photo.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            presenter.present(alert, animated: true)
+        }
+
         func imagePickerController(
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
@@ -1418,9 +1436,13 @@ struct EmbeddedWebView: UIViewRepresentable {
                     return nil
                 }
             }
+            let failedToPrepare = image == nil || fileURL == nil
 
             picker.dismiss(animated: true) { [weak self] in
                 self?.finishFileUpload(with: fileURL.map { [$0] })
+                if failedToPrepare {
+                    self?.presentCameraAttachmentFailure()
+                }
             }
         }
 

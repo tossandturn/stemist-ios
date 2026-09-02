@@ -917,6 +917,8 @@ assert.match(webModule, /WKScriptMessageHandler/, 'the WebView must receive the 
 assert.match(webModule, /UIImagePickerController\.isSourceTypeAvailable\(\.camera\)/, 'Take photo must verify camera availability')
 assert.match(webModule, /sourceType\s*=\s*\.camera/, 'Take photo must present the native camera picker')
 assert.match(webModule, /AVCaptureDevice\.requestAccess\(for:\s*\.video\)/, 'camera permission must be requested before presenting capture')
+assert.match(webModule, /presentCameraAttachmentFailure/, 'camera conversion failures must remain visible instead of silently returning an empty upload')
+assert.match(webModule, /Photo could not be attached/, 'camera conversion failures need an actionable student-facing message')
 assert.match(webModule, /Choose Upload photo instead/, 'camera-unavailable state must direct the user to the separate upload flow')
 assert.match(webModule, /userInterfaceIdiom\s*==\s*\.pad/, 'iPad input needs a dedicated gesture policy')
 assert.match(webModule, /allowedTouchTypes/, 'the scroll gesture must not consume Apple Pencil input')
