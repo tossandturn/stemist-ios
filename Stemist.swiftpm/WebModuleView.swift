@@ -229,18 +229,24 @@ private enum PenInputBehaviorScript {
         const host = window.location.hostname.toLowerCase();
         if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
         const handler = window.webkit?.messageHandlers?.stemistPenInput;
+        // Never match every canvas here. PDF.js renders the question paper
+        // into a normal canvas; setting touch-action:none on that base layer
+        // prevents a finger from panning the surrounding PDF scroller.
         const drawingSelector = [
-            'canvas',
-            '[data-drawing-surface]',
-            '[data-handwriting-canvas]',
-            '[data-answer-canvas]',
-            '[data-input-mode="handwrite"]',
+            '[data-ink-surface="handwriting"]',
+            '[data-ink-surface="pdf"]',
+            'canvas[data-drawing-surface]',
+            'canvas[data-handwriting-canvas]',
+            'canvas[data-answer-canvas]',
+            'canvas[data-input-mode="handwrite"]',
             '.handwriting-pad__canvas',
             '.pdf-ink-layer',
             '.drawing-canvas',
             '.handwriting-canvas',
             '.signature-pad'
         ].join(',');
+        const scrollSelector = '.pdf-canvas-scroll, [data-pdf-scroll]';
+        const activePenPointers = new Set();
         const styleId = 'stemist-pen-input-behavior';
         const drawingTarget = (target) => {
             if (!(target instanceof Element)) return null;
@@ -257,24 +263,37 @@ private enum PenInputBehaviorScript {
                 + '  user-select: none !important;\\n'
                 + '  -webkit-touch-callout: none !important;\\n'
                 + '  touch-action: none !important;\\n'
+                + '}\\n'
+                // Explicitly restore native finger/trackpad panning for the
+                // PDF container while keeping its ink layer pointer-safe.
+                + `${scrollSelector} {\\n`
+                + '  touch-action: pan-x pan-y pinch-zoom !important;\\n'
+                + '  -webkit-overflow-scrolling: touch !important;\\n'
                 + '}';
             root.appendChild(style);
         };
         const blockSelection = (event) => {
-            if (drawingTarget(event.target)) event.preventDefault();
+            if (drawingTarget(event.target) || activePenPointers.size) event.preventDefault();
         };
         const notifyPenActivity = (active) => {
             try { handler?.postMessage({ active }); } catch (_) {}
         };
         const capturePen = (event) => {
             if (event.pointerType !== 'pen') return;
+            activePenPointers.add(event.pointerId);
             const target = drawingTarget(event.target);
             if (!target || typeof target.setPointerCapture !== 'function') return;
             notifyPenActivity(true);
             try { target.setPointerCapture(event.pointerId); } catch (_) {}
         };
         const releasePen = (event) => {
-            if (event.pointerType === 'pen') notifyPenActivity(false);
+            if (event.pointerType !== 'pen') return;
+            activePenPointers.delete(event.pointerId);
+            if (!activePenPointers.size) notifyPenActivity(false);
+        };
+        const clearPenSelection = () => {
+            if (!activePenPointers.size) return;
+            try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
         };
 
         const observeDocument = () => {
@@ -294,6 +313,7 @@ private enum PenInputBehaviorScript {
         document.addEventListener('pointerdown', capturePen, true);
         document.addEventListener('pointerup', releasePen, true);
         document.addEventListener('pointercancel', releasePen, true);
+        document.addEventListener('selectionchange', clearPenSelection, true);
         if (document.documentElement) {
             observeDocument();
         } else {
