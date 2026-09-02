@@ -363,7 +363,14 @@ private enum NativePencilSurfaceScript {
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ['data-ink-interactive', 'data-ink-tool', 'style', 'class']
+                attributeFilter: [
+                    'data-ink-surface',
+                    'data-ink-surface-id',
+                    'data-ink-interactive',
+                    'data-ink-tool',
+                    'style',
+                    'class'
+                ]
             });
             window.addEventListener('resize', schedule, { passive: true });
             window.addEventListener('scroll', schedule, { capture: true, passive: true });

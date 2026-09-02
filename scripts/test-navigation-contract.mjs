@@ -877,6 +877,7 @@ assert.match(webModule, /import\s+PencilKit/, 'iPad writing must have a native P
 assert.match(webModule, /NativePencilSurfaceScript/, 'native PencilKit capture must discover explicit web ink surfaces')
 assert.match(webModule, /data-ink-interactive/, 'native PencilKit capture must ignore disabled and read-only surfaces')
 assert.match(webModule, /dataset\.inkSurfaceId/, 'native PencilKit capture must require a stable web surface ID')
+assert.match(webModule, /data-ink-surface-id/, 'surface ID changes must refresh native PencilKit hit regions')
 assert.match(webModule, /data-ink-tool/, 'native PencilKit capture must follow the web tool selection')
 assert.match(webModule, /coordinateSpace[\s\S]{0,120}webViewViewport/, 'native Pencil strokes must declare their WebView coordinate space')
 assert.match(webModule, /surfaceFrame[\s\S]{0,220}surfaceFrame/, 'native Pencil strokes must carry the matched surface frame')
