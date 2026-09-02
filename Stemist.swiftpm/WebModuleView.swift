@@ -542,7 +542,8 @@ struct WebModuleView: View {
                     }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack(spacing: 18) {
+                if route.showsBrowserNavigation {
+                    HStack(spacing: 18) {
                     Button {
                         webViewStore.goBack()
                     } label: {
@@ -583,10 +584,13 @@ struct WebModuleView: View {
                     .accessibilityLabel("Open current page in Safari")
                     .accessibilityIdentifier("web-safari")
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.bar)
-            }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.bar)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("web-browser-navigation")
+                    }
+                }
             .sheet(isPresented: $showsSafari) {
                 SafariView(url: currentURL ?? launchURL)
                     .ignoresSafeArea()
