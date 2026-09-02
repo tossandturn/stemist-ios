@@ -618,6 +618,11 @@ assert.match(
 )
 assert.match(
   shellUITests,
+  /waitForCustomURLReplayWindow\(\)[\s\S]{0,520}?closeWebModule\(accountModule[\s\S]{0,520}?openCustomURLFromSafari\(accountURL\)[\s\S]{0,320}?reopenedAccountModule\.waitForExistence/,
+  'the warm replay regression must wait out duplicate suppression, close the prior module, then reopen the same URL'
+)
+assert.match(
+  shellUITests,
   /SearchFieldItemView[\s\S]{0,260}?\.firstMatch/,
   'Safari address input must prefer the stable focused search-field identifier over duplicate accessibility labels'
 )
