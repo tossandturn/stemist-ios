@@ -1130,9 +1130,12 @@ private extension String {
 }
 
 enum StemistTheme {
-    static let brand = Color(red: 0.06, green: 0.34, blue: 0.78)
-    static let ielts = Color(red: 0.08, green: 0.38, blue: 0.86)
-    static let stem = Color(red: 0.02, green: 0.54, blue: 0.44)
+    // Match the production IELTSist/STEM web tokens so the native shell does
+    // not feel like a separate product: brand #7357e8, STEM green #3a9d85.
+    // System grouped surfaces remain adaptive for dark mode.
+    static let brand = Color(red: 0.451, green: 0.341, blue: 0.910)
+    static let ielts = Color(red: 0.463, green: 0.341, blue: 0.910)
+    static let stem = Color(red: 0.227, green: 0.616, blue: 0.522)
     static let background = Color(uiColor: .systemGroupedBackground)
     static let secondarySurface = Color(uiColor: .secondarySystemGroupedBackground)
 }

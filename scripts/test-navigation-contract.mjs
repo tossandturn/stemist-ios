@@ -65,6 +65,8 @@ assert.match(
   'account visibility must propagate to every presented web module'
 )
 assert.match(contentView, /configuration\.showsAccountEntry/, 'the Profile account entry must be hidden by default')
+assert.match(contentView, /enum\s+StemistTheme/, 'the native shell must use shared semantic theme tokens')
+assert.match(contentView, /brand\s*=\s*Color\(red:\s*0\.451,\s*green:\s*0\.341,\s*blue:\s*0\.910\)/, 'the native shell brand must match the production purple token')
 assert.match(
   contentView,
   /\.environment\(\\\.stemistAllowsAccountEntry,\s*configuration\.showsAccountEntry\)/,
