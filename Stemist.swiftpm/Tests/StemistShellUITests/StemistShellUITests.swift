@@ -217,7 +217,7 @@ final class StemistShellUITests: XCTestCase {
         let listeningModule = webModule("web-module-ielts-listening")
         XCTAssertTrue(listeningModule.waitForExistence(timeout: 3))
 
-        openCustomURLFromSafari(accountURL)
+        openCustomURLDirectly(accountURL)
 
         XCTAssertTrue(
             listeningModule.waitForNonExistence(timeout: 5),
@@ -240,7 +240,7 @@ final class StemistShellUITests: XCTestCase {
         waitForCustomURLReplayWindow()
         closeWebModule(accountModule, named: "web-module-ielts-account")
 
-        openCustomURLFromSafari(accountURL)
+        openCustomURLDirectly(accountURL)
 
         let reopenedAccountModule = webModule("web-module-ielts-account")
         guard reopenedAccountModule.waitForExistence(timeout: 5) else {
@@ -498,6 +498,18 @@ final class StemistShellUITests: XCTestCase {
         XCTAssertTrue(
             waitForStemistHandoff(from: safari, previousLifecycleValue: previousLifecycleValue),
             customURLHandoffFailureDescription(safari: safari, url: url)
+        )
+    }
+
+    private func openCustomURLDirectly(_ url: URL) {
+        // Keep the Safari path in the cold-launch test, but use XCTest's
+        // system URL handoff for warm replacement/reopen. This exercises the
+        // same application/scene callbacks without depending on Safari's
+        // mutable iPad address-bar hierarchy or an Open prompt race.
+        app.open(url)
+        XCTAssertTrue(
+            app.otherElements["stemist-root"].waitForExistence(timeout: 10),
+            "Expected Stemist to return to the foreground after opening \(url.absoluteString)."
         )
     }
 

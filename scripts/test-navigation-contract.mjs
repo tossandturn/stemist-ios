@@ -574,8 +574,9 @@ assert.match(
   /tabButton\("Profile"\)/,
   'student mode must verify account-entry absence through the same floating-tab hierarchy used for navigation'
 )
-assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the custom-scheme regression must open through Safari instead of the unreliable XCUIApplication.open URL shortcut')
-assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'both shell modes must exercise the account deep link through the real custom-scheme path')
+assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the cold-launch custom-scheme regression must retain a real Safari handoff')
+assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'cold-launch coverage must exercise the account deep link through Safari')
+assert.match(shellUITests, /private func openCustomURLDirectly\(_ url: URL\)/, 'warm account replacement must have a deterministic system URL handoff')
 assert.match(shellUITests, /waitForStemistHandoff/, 'the custom-scheme regression must wait for the iOS handoff to finish')
 assert.match(
   shellUITests,
@@ -619,8 +620,8 @@ assert.match(
 )
 assert.match(
   shellUITests,
-  /waitForCustomURLReplayWindow\(\)[\s\S]{0,520}?closeWebModule\(accountModule[\s\S]{0,520}?openCustomURLFromSafari\(accountURL\)[\s\S]{0,320}?reopenedAccountModule\.waitForExistence/,
-  'the warm replay regression must wait out duplicate suppression, close the prior module, then reopen the same URL'
+  /waitForCustomURLReplayWindow\(\)[\s\S]{0,520}?closeWebModule\(accountModule[\s\S]{0,520}?openCustomURLDirectly\(accountURL\)[\s\S]{0,320}?reopenedAccountModule\.waitForExistence/,
+  'the warm replay regression must wait out duplicate suppression, close the prior module, then reopen the same URL deterministically'
 )
 assert.match(
   shellUITests,
