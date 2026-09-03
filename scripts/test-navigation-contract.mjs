@@ -577,6 +577,7 @@ assert.match(
 assert.match(shellUITests, /XCUIApplication\(bundleIdentifier:\s*"com\.apple\.mobilesafari"\)/, 'the cold-launch custom-scheme regression must retain a real Safari handoff')
 assert.match(shellUITests, /openCustomURLFromSafari\(accountURL\)/, 'cold-launch coverage must exercise the account deep link through Safari')
 assert.match(shellUITests, /private func openCustomURLDirectly\(_ url: URL\)/, 'warm account replacement must have a deterministic system URL handoff')
+assert.match(shellUITests, /XCUIDevice\.shared\.system\.open\(url\)/, 'warm account replacement must use the system default-app URL handoff')
 assert.match(shellUITests, /waitForStemistHandoff/, 'the custom-scheme regression must wait for the iOS handoff to finish')
 assert.match(
   shellUITests,

@@ -503,10 +503,10 @@ final class StemistShellUITests: XCTestCase {
 
     private func openCustomURLDirectly(_ url: URL) {
         // Keep the Safari path in the cold-launch test, but use XCTest's
-        // system URL handoff for warm replacement/reopen. This exercises the
-        // same application/scene callbacks without depending on Safari's
-        // mutable iPad address-bar hierarchy or an Open prompt race.
-        app.open(url)
+        // system default-app handoff for warm replacement/reopen. Calling
+        // XCUIApplication.open would relaunch the target proxy and can drop a
+        // URL intended for the already-running scene.
+        XCUIDevice.shared.system.open(url)
         XCTAssertTrue(
             app.otherElements["stemist-root"].waitForExistence(timeout: 10),
             "Expected Stemist to return to the foreground after opening \(url.absoluteString)."
