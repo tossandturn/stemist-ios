@@ -162,6 +162,9 @@ private struct WebWorkspaceHost: View {
                 requestLaunch: requestLaunch,
                 dismissWorkspace: dismissWorkspace
             )
+            // Reset Coach pages so their nested aria-modal focus state cannot
+            // leak into the resident study WebView.
+            .id(launch.route.opensCoachOnLoad ? launch.id : "resident-study-webview")
             // Keep this resident across in-place route changes. EmbeddedWebView
             // reloads the new URL itself, preserving the WebKit process, its
             // authenticated store and the native input bridge instead of
@@ -200,6 +203,19 @@ struct ContentView: View {
     private func normalizeSelectedTab() {
         if !configuration.showsAccountEntry && selectedTab == .profile {
             selectedTab = .today
+        }
+    }
+
+    /// Dashboard shortcuts are a direct user intent, not a swipe between
+    /// tabs. Commit the selection in the same transaction so iPad's split
+    /// TabView cannot leave the destination list in an intermediate,
+    /// non-hittable transition state.
+    private func selectTab(_ tab: AppTab) {
+        guard selectedTab != tab else { return }
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            selectedTab = tab
         }
     }
 
@@ -243,7 +259,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-                DashboardView(selectedTab: $selectedTab, openRoute: present)
+                DashboardView(selectTab: selectTab, openRoute: present)
                     .tabItem {
                         Label("Today", systemImage: "house")
                             .accessibilityElement(children: .ignore)
@@ -334,7 +350,6 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(StemistTheme.background)
                 .zIndex(10)
-                .accessibilityAddTraits(.isModal)
             }
 
         }
@@ -388,7 +403,7 @@ struct ContentView: View {
 }
 
 private struct DashboardView: View {
-    @Binding var selectedTab: AppTab
+    let selectTab: (AppTab) -> Void
     let openRoute: (WebRoute) -> Void
 
     var body: some View {
@@ -414,7 +429,7 @@ private struct DashboardView: View {
                             icon: "text.book.closed.fill",
                             tint: StemistTheme.ielts
                         ) {
-                            selectedTab = .ielts
+                            selectTab(.ielts)
                         }
 
                         LearningSpaceButton(
@@ -423,7 +438,7 @@ private struct DashboardView: View {
                             icon: "atom",
                             tint: StemistTheme.stem
                         ) {
-                            selectedTab = .stem
+                            selectTab(.stem)
                         }
 
                         LearningSpaceButton(
@@ -437,7 +452,7 @@ private struct DashboardView: View {
                     }
 
                     Button {
-                        selectedTab = .notebook
+                        selectTab(.notebook)
                     } label: {
                         HStack(spacing: 14) {
                             Image(systemName: "square.and.pencil")

@@ -68,13 +68,15 @@ final class StemistShellUITests: XCTestCase {
 
         assertDashboardLearningSpace(
             "learning-space-ielts-practice",
-            exposesRoute: "route-ielts-listening"
+            exposesRoute: "route-ielts-listening",
+            destinationTabIdentifier: "tab-ielts-content"
         )
 
         selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-stem-study",
-            exposesRoute: "route-stem-ig"
+            exposesRoute: "route-stem-ig",
+            destinationTabIdentifier: "tab-stem-content"
         )
 
         selectTab("Today")
@@ -126,13 +128,15 @@ final class StemistShellUITests: XCTestCase {
         selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-ielts-practice",
-            exposesRoute: "route-ielts-listening"
+            exposesRoute: "route-ielts-listening",
+            destinationTabIdentifier: "tab-ielts-content"
         )
 
         selectTab("Today")
         assertDashboardLearningSpace(
             "learning-space-stem-study",
-            exposesRoute: "route-stem-ig"
+            exposesRoute: "route-stem-ig",
+            destinationTabIdentifier: "tab-stem-content"
         )
 
         selectTab("Today")
@@ -309,14 +313,28 @@ final class StemistShellUITests: XCTestCase {
             .firstMatch
     }
 
-    private func assertDashboardLearningSpace(_ identifier: String, exposesRoute routeIdentifier: String) {
+    private func assertDashboardLearningSpace(
+        _ identifier: String,
+        exposesRoute routeIdentifier: String,
+        destinationTabIdentifier: String
+    ) {
         let learningSpace = app.buttons[identifier]
         XCTAssertTrue(waitUntilHittable(learningSpace), "Expected \(identifier) to be available and hittable")
         guard learningSpace.exists, learningSpace.isHittable else { return }
         learningSpace.tap()
+
+        let destinationContent = app.otherElements[destinationTabIdentifier]
+        guard waitUntilHittable(destinationContent, timeout: 5) else {
+            XCTFail(
+                "Expected \(identifier) to select \(destinationTabIdentifier)."
+                    + "\n\nAccessibility hierarchy after selecting the learning space:\n\(app.debugDescription)"
+            )
+            return
+        }
         XCTAssertTrue(
-            waitUntilHittable(app.buttons[routeIdentifier]),
-            "Expected \(identifier) to open its learning space"
+            waitUntilHittableByScrolling(app.buttons[routeIdentifier], timeout: 5),
+            "Expected \(identifier) to expose a hittable \(routeIdentifier) route."
+                + "\n\nAccessibility hierarchy after selecting the learning space:\n\(app.debugDescription)"
         )
     }
 
