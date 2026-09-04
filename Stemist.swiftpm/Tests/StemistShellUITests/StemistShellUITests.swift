@@ -101,13 +101,11 @@ final class StemistShellUITests: XCTestCase {
         XCTAssertFalse(tabButton("Profile").exists)
         selectTab("IELTS")
 
-        let listeningRoute = app.buttons["route-ielts-listening"]
+        let listeningRoute = firstUsableButton(identifier: "route-ielts-listening")
         XCTAssertTrue(
-            waitUntilHittableByScrolling(listeningRoute, timeout: 5),
+            tapPhoneElement(listeningRoute, timeout: 8),
             "Expected the compact phone shell to expose a hittable IELTS route.\n\n\(app.debugDescription)"
         )
-        guard listeningRoute.exists, listeningRoute.isHittable else { return }
-        listeningRoute.tap()
 
         let module = webModule("web-module-ielts-listening")
         XCTAssertTrue(module.waitForExistence(timeout: 3), "Expected the phone shell to open the IELTS Listening module")
@@ -353,6 +351,51 @@ final class StemistShellUITests: XCTestCase {
         return app.buttons
             .matching(NSPredicate(format: "label == %@ AND hittable == true", visibleLabel))
             .firstMatch
+    }
+
+    private func firstUsableButton(identifier: String) -> XCUIElement {
+        let candidates = app.buttons.matching(NSPredicate(format: "identifier == %@", identifier))
+        return candidates.allElementsBoundByIndex.first(where: {
+            let frame = $0.frame
+            return $0.exists && frame.width > 1 && frame.height > 1
+        }) ?? candidates.firstMatch
+    }
+
+    /// Compact iPhone Lists can briefly expose a zero-frame accessibility
+    /// proxy while rows are being virtualized. Scroll toward the route based
+    /// on its resolved frame and tap its center once it is on-screen, without
+    /// asking XCTest to derive an invalid activation point for the proxy.
+    private func tapPhoneElement(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let windowFrame = app.windows.firstMatch.frame
+        while Date() < deadline {
+            guard element.exists else {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+                continue
+            }
+
+            let frame = element.frame
+            guard frame.width > 1, frame.height > 1 else {
+                app.swipeUp()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+                continue
+            }
+
+            if frame.minY < windowFrame.minY {
+                app.swipeDown()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+                continue
+            }
+            if frame.maxY > windowFrame.maxY {
+                app.swipeUp()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+                continue
+            }
+
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return true
+        }
+        return false
     }
 
     private func assertDashboardLearningSpace(
