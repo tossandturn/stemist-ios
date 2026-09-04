@@ -1591,6 +1591,7 @@ struct EmbeddedWebView: UIViewRepresentable {
                         Object.defineProperty(input, 'files', { configurable: true, value: transfer.files });
                     }
                     input.removeAttribute('data-stemist-camera-request');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
                     input.dispatchEvent(new Event('change', { bubbles: true }));
                     return true;
                 } catch (_) {
