@@ -413,10 +413,10 @@ private enum CameraCaptureIntentScript {
         if (host !== 'ieltsist.com' && !host.endsWith('.ieltsist.com')) return;
         const handler = window.webkit?.messageHandlers?.stemistCameraCapture;
         if (!handler) return;
-        const cameraLabel = /^(take photo|camera|拍照|使用摄像头|打开摄像头)$/i;
+        const cameraLabel = /(take photo|camera|拍照|使用摄像头|打开摄像头)/i;
         const textOf = (element) => (element?.textContent || '')
             .replace(/\\s+/g, ' ')
-            .trim();
+            .trim() + ' ' + (element?.getAttribute?.('aria-label') || '');
         const isCameraInput = (element) => element instanceof HTMLInputElement
             && element.type === 'file'
             && (element.hasAttribute('capture') || element.hasAttribute('data-camera-input'));
@@ -427,14 +427,44 @@ private enum CameraCaptureIntentScript {
             if (!element.matches('button, [role="button"], label')) return false;
             return cameraLabel.test(textOf(element));
         };
-        const recordCameraIntent = () => {
+        const findCameraInput = (candidates) => {
+            const direct = candidates.find(isCameraInput);
+            if (direct) return direct;
+
+            const control = candidates.find((element) => element.hasAttribute?.('data-camera-intent')
+                || cameraLabel.test(textOf(element)));
+            if (!control) return null;
+
+            const scopes = [
+                control,
+                control.closest?.('.handwriting-pad, .ai-coach, form, section, article'),
+                control.parentElement,
+                document
+            ].filter(Boolean);
+            for (const scope of scopes) {
+                const input = scope.querySelector?.('input[type="file"][capture], input[type="file"][data-camera-input]');
+                if (input && isCameraInput(input)) return input;
+            }
+            return null;
+        };
+        const nextRequestID = () => {
+            const random = globalThis.crypto?.randomUUID?.()
+                || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            return `camera-${random}`.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 96);
+        };
+        const recordCameraIntent = (input) => {
             // This runs in the capture phase, before React opens the hidden
             // file input. The native panel delegate can read this marker if
             // the WKScriptMessage arrives one run-loop turn too late.
             window.__stemistCameraIntentAt = Date.now();
+            const requestId = nextRequestID();
+            if (input) input.setAttribute('data-stemist-camera-request', requestId);
             try {
-                handler.postMessage({ kind: 'camera' });
+                handler.postMessage({ kind: 'camera-direct', requestId });
+                return true;
             } catch (_) {}
+            if (input) input.removeAttribute('data-stemist-camera-request');
+            return false;
         };
         document.addEventListener('click', (event) => {
             if (!(event.target instanceof Element)) return;
@@ -444,7 +474,23 @@ private enum CameraCaptureIntentScript {
                 event.target.closest('label')
             ].filter(Boolean);
             if (!candidates.some(isCameraControl)) return;
-            recordCameraIntent();
+
+            const input = findCameraInput(candidates);
+            if (!input) {
+                // Leave unknown controls to WebKit's normal upload path. The
+                // marker still lets iOS 18.4+ select the camera if the page
+                // opens a capture input on the next event turn.
+                window.__stemistCameraIntentAt = Date.now();
+                try { handler.postMessage({ kind: 'camera' }); } catch (_) {}
+                return;
+            }
+
+            // A successful native handoff owns the event. Preventing the
+            // hidden input click is what keeps iOS 17 from opening Files.
+            if (recordCameraIntent(input)) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
         }, true);
     })();
     """
@@ -922,6 +968,11 @@ struct EmbeddedWebView: UIViewRepresentable {
         var hasRetriedAfterTermination = false
         fileprivate weak var pencilOverlay: NativePencilSurfaceOverlay?
         private var cameraCaptureIntentDeadline: Date?
+        private var directCameraRequestID: String?
+        private weak var directCameraWebView: WKWebView?
+
+        private static let maxCameraDimension: CGFloat = 2048
+        private static let maxCameraAttachmentBytes = 4 * 1024 * 1024
 
         init(parent: EmbeddedWebView, store: WebViewStore) {
             self.parent = parent
@@ -950,14 +1001,47 @@ struct EmbeddedWebView: UIViewRepresentable {
 
             guard message.name == CameraCaptureIntentScript.handlerName,
                   let body = message.body as? [String: Any],
-                  body["kind"] as? String == "camera" else {
+                  isTrustedProductMessage(message) else {
                 return
             }
+
+            if body["kind"] as? String == "camera-direct" {
+                guard let requestID = body["requestId"] as? String,
+                      isSafeCameraRequestID(requestID),
+                      let webView = store.webView else {
+                    return
+                }
+                directCameraRequestID = requestID
+                directCameraWebView = webView
+                cameraCaptureIntentDeadline = nil
+                DispatchQueue.main.async { [weak self, weak webView] in
+                    guard let self, let webView,
+                          self.directCameraRequestID == requestID else { return }
+                    self.presentCameraCapture(in: webView)
+                }
+                return
+            }
+
+            guard body["kind"] as? String == "camera" else { return }
 
             // The message arrives immediately before WebKit asks the delegate
             // to present the file panel for the same input. Keep the window
             // short so a later Upload photo action cannot inherit camera mode.
             cameraCaptureIntentDeadline = Date().addingTimeInterval(2)
+        }
+
+        private func isTrustedProductMessage(_ message: WKScriptMessage) -> Bool {
+            guard message.frameInfo.isMainFrame else { return false }
+            let origin = message.frameInfo.securityOrigin
+            guard let originURL = URL(string: "\(origin.protocol)://\(origin.host)") else {
+                return false
+            }
+            return ProductWebPolicy.isAllowed(originURL)
+        }
+
+        private func isSafeCameraRequestID(_ value: String) -> Bool {
+            guard !value.isEmpty, value.count <= 96 else { return false }
+            return value.range(of: "^[A-Za-z0-9._:-]+$", options: .regularExpression) != nil
         }
 
         private func updatePencilSurfaces(from body: Any) {
@@ -1039,6 +1123,11 @@ struct EmbeddedWebView: UIViewRepresentable {
         }
 
         func load(_ url: URL, in webView: WKWebView) {
+            if let requestID = directCameraRequestID {
+                clearDirectCameraInput(requestID, in: directCameraWebView)
+                directCameraRequestID = nil
+                directCameraWebView = nil
+            }
             requestedURL = url
             pencilOverlay?.reset()
             webView.configuration.preferences.isTextInteractionEnabled = true
@@ -1331,11 +1420,17 @@ struct EmbeddedWebView: UIViewRepresentable {
         }
 
         private func presentCameraCapture(in webView: WKWebView) {
-            guard let presenter = presentingViewController(for: webView),
-                  !(presenter is UIAlertController),
-                  !(presenter is UIDocumentPickerViewController),
-                  !(presenter is UIImagePickerController) else {
-                finishFileUpload(with: nil)
+            guard let presenter = presentingViewController(for: webView) else {
+                cancelCameraCapture()
+                return
+            }
+            // A second tap while the system camera is already on screen is a
+            // duplicate event, not a failed capture. Keep the first request
+            // alive until the picker completes.
+            if presenter is UIImagePickerController { return }
+            guard !(presenter is UIAlertController),
+                  !(presenter is UIDocumentPickerViewController) else {
+                cancelCameraCapture()
                 return
             }
 
@@ -1380,7 +1475,7 @@ struct EmbeddedWebView: UIViewRepresentable {
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-                self?.finishFileUpload(with: nil)
+                self?.cancelCameraCapture()
             })
             presenter.present(alert, animated: true)
         }
@@ -1392,10 +1487,10 @@ struct EmbeddedWebView: UIViewRepresentable {
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
-                self?.finishFileUpload(with: nil)
+                self?.cancelCameraCapture()
             })
             alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { [weak self] _ in
-                self?.finishFileUpload(with: nil)
+                self?.cancelCameraCapture()
                 guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
                 UIApplication.shared.open(settingsURL, options: [:])
             })
@@ -1420,13 +1515,109 @@ struct EmbeddedWebView: UIViewRepresentable {
             presenter.present(alert, animated: true)
         }
 
+        private func cancelCameraCapture() {
+            guard let requestID = directCameraRequestID else {
+                finishFileUpload(with: nil)
+                return
+            }
+            let webView = directCameraWebView
+            directCameraRequestID = nil
+            directCameraWebView = nil
+            clearDirectCameraInput(requestID, in: webView)
+        }
+
+        private func clearDirectCameraInput(_ requestID: String, in webView: WKWebView?) {
+            guard let webView else { return }
+            let script = """
+            (() => {
+                const input = document.querySelector('[data-stemist-camera-request="\(requestID)"]');
+                if (input) input.removeAttribute('data-stemist-camera-request');
+                return Boolean(input);
+            })();
+            """
+            webView.evaluateJavaScript(script, completionHandler: nil)
+        }
+
+        private func preparedCameraJPEG(from image: UIImage) -> Data? {
+            let sourceSize = image.size
+            guard sourceSize.width > 0, sourceSize.height > 0 else { return nil }
+            let longestSide = max(sourceSize.width, sourceSize.height)
+            let scale = min(1, Self.maxCameraDimension / longestSide)
+            let targetSize = CGSize(
+                width: max(1, floor(sourceSize.width * scale)),
+                height: max(1, floor(sourceSize.height * scale))
+            )
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            format.opaque = true
+            let rendered = UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
+            for quality in [CGFloat(0.86), 0.74, 0.62, 0.5] {
+                guard let data = rendered.jpegData(compressionQuality: quality) else { continue }
+                if data.count <= Self.maxCameraAttachmentBytes { return data }
+            }
+            return nil
+        }
+
+        private func deliverDirectCameraImage(
+            _ data: Data,
+            requestID: String,
+            to webView: WKWebView?
+        ) {
+            guard data.count <= Self.maxCameraAttachmentBytes,
+                  let webView else {
+                clearDirectCameraInput(requestID, in: webView)
+                presentCameraAttachmentFailure()
+                return
+            }
+            let encoded = data.base64EncodedString()
+            let script = """
+            (() => {
+                const input = document.querySelector('[data-stemist-camera-request="\(requestID)"]');
+                if (!(input instanceof HTMLInputElement)) return false;
+                try {
+                    const binary = atob('\(encoded)');
+                    const bytes = new Uint8Array(binary.length);
+                    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+                    const transfer = typeof DataTransfer === 'function'
+                        ? new DataTransfer()
+                        : new ClipboardEvent('').clipboardData;
+                    if (!transfer) return false;
+                    transfer.items.add(new File([bytes], 'stemist-camera.jpg', { type: 'image/jpeg' }));
+                    try {
+                        input.files = transfer.files;
+                    } catch (_) {
+                        Object.defineProperty(input, 'files', { configurable: true, value: transfer.files });
+                    }
+                    input.removeAttribute('data-stemist-camera-request');
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    return true;
+                } catch (_) {
+                    input.removeAttribute('data-stemist-camera-request');
+                    return false;
+                }
+            })();
+            """
+            webView.evaluateJavaScript(script) { [weak self, weak webView] result, _ in
+                guard (result as? Bool) == true else {
+                    DispatchQueue.main.async {
+                        self?.clearDirectCameraInput(requestID, in: webView)
+                        self?.presentCameraAttachmentFailure()
+                    }
+                    return
+                }
+            }
+        }
+
         func imagePickerController(
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
             let image = info[.originalImage] as? UIImage
-            let fileURL = image.flatMap { image -> URL? in
-                guard let data = image.jpegData(compressionQuality: 0.9) else { return nil }
+            let directRequestID = directCameraRequestID
+            let preparedData = image.flatMap { self.preparedCameraJPEG(from: $0) }
+            let fileURL = directRequestID == nil ? preparedData.flatMap { data -> URL? in
                 let url = FileManager.default.temporaryDirectory
                     .appendingPathComponent("stemist-camera-\(UUID().uuidString).jpg")
                 do {
@@ -1435,20 +1626,33 @@ struct EmbeddedWebView: UIViewRepresentable {
                 } catch {
                     return nil
                 }
-            }
-            let failedToPrepare = image == nil || fileURL == nil
+            } : nil
+            let failedToPrepare = image == nil || preparedData == nil
 
             picker.dismiss(animated: true) { [weak self] in
-                self?.finishFileUpload(with: fileURL.map { [$0] })
-                if failedToPrepare {
-                    self?.presentCameraAttachmentFailure()
+                guard let self else { return }
+                if let directRequestID {
+                    let webView = self.directCameraWebView
+                    self.directCameraRequestID = nil
+                    self.directCameraWebView = nil
+                    if let preparedData, !failedToPrepare {
+                        self.deliverDirectCameraImage(preparedData, requestID: directRequestID, to: webView)
+                    } else {
+                        self.clearDirectCameraInput(directRequestID, in: webView)
+                        self.presentCameraAttachmentFailure()
+                    }
+                } else {
+                    self.finishFileUpload(with: fileURL.map { [$0] })
+                    if failedToPrepare {
+                        self.presentCameraAttachmentFailure()
+                    }
                 }
             }
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             picker.dismiss(animated: true) { [weak self] in
-                self?.finishFileUpload(with: nil)
+                self?.cancelCameraCapture()
             }
         }
 
@@ -1548,6 +1752,9 @@ struct EmbeddedWebView: UIViewRepresentable {
 
         deinit {
             fileUploadCompletion?(nil)
+            if let requestID = directCameraRequestID {
+                clearDirectCameraInput(requestID, in: directCameraWebView)
+            }
         }
     }
 }
