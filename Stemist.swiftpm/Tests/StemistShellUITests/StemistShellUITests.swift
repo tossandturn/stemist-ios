@@ -95,6 +95,30 @@ final class StemistShellUITests: XCTestCase {
         )
     }
 
+    func testStudentBuildPhoneShellOpensAndClosesIELTSRoute() {
+        launchApp(fullFeatureTest: false)
+
+        XCTAssertFalse(tabButton("Profile").exists)
+        selectTab("IELTS")
+
+        let listeningRoute = app.buttons["route-ielts-listening"]
+        XCTAssertTrue(
+            waitUntilHittableByScrolling(listeningRoute, timeout: 5),
+            "Expected the compact phone shell to expose a hittable IELTS route.\n\n\(app.debugDescription)"
+        )
+        guard listeningRoute.exists, listeningRoute.isHittable else { return }
+        listeningRoute.tap()
+
+        let module = webModule("web-module-ielts-listening")
+        XCTAssertTrue(module.waitForExistence(timeout: 3), "Expected the phone shell to open the IELTS Listening module")
+        guard module.exists else { return }
+        XCTAssertFalse(
+            app.otherElements["web-browser-navigation"].exists,
+            "Immersive phone practice must keep the browser recovery bar hidden"
+        )
+        closeWebModule(module, named: "web-module-ielts-listening")
+    }
+
     func testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes() {
         launchApp(fullFeatureTest: true)
 

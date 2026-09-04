@@ -555,6 +555,7 @@ assert.match(shellUITests, /testStudentBuildHidesAccountEntryAndRejectsAccountDe
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEveryIELTSRoute/, 'the shell suite must cover every IELTS route')
 assert.match(shellUITests, /testStudentBuildCanOpenAndCloseEverySTEMRoute/, 'the shell suite must cover every STEM route')
 assert.match(shellUITests, /testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook/, 'the shell suite must cover dashboard learning spaces and Notebook')
+assert.match(shellUITests, /testStudentBuildPhoneShellOpensAndClosesIELTSRoute/, 'the shell suite must cover the compact phone route and dismissal path')
 assert.match(shellUITests, /testFullFeatureQABuildKeepsAccountEntryAndAllLearningRoutes/, 'the shell suite must cover QA mode and every learning route')
 assert.match(shellUITests, /testFullFeatureQABuildOpensAccountDeepLinkFromColdLaunch/, 'the shell suite must cover cold-launch QA account deep links')
 assert.match(shellUITests, /testFullFeatureQABuildQueuesAccountRouteDuringModuleReplacement/, 'the shell suite must cover in-process route replacement during dismissal')
@@ -1109,6 +1110,7 @@ const studentShellTests = [
   'testStudentBuildCanOpenAndCloseEveryIELTSRoute',
   'testStudentBuildCanOpenAndCloseEverySTEMRoute',
   'testStudentBuildCanNavigateDashboardLearningSpacesAndNotebook',
+  'testStudentBuildPhoneShellOpensAndClosesIELTSRoute',
 ]
 for (const [workflowName, workflow] of [
   ['GitHub Actions', githubWorkflow],
@@ -1129,6 +1131,12 @@ for (const [workflowName, workflow] of [
 }
 assert.match(githubWorkflow, /student-shell-ui-tests\.log/, 'macOS CI must retain the student UI test log')
 assert.match(githubWorkflow, /qa-shell-ui-tests\.log/, 'macOS CI must retain the QA UI test log')
+assert.match(githubWorkflow, /student-phone-shell-ui-tests\.log/, 'macOS CI must retain the phone UI test log')
+assert.match(githubWorkflow, /ios-ui-tests-phone/, 'macOS CI must retain the phone result bundle')
+assert.match(githubWorkflow, /PHONE_UI_TEST_STATUS=\$\{PIPESTATUS\[0\]\}/, 'macOS CI must fail when the phone UI test fails')
+assert.match(codemagic, /student-phone-shell-ui-tests\.log/, 'Codemagic must retain the phone UI test log')
+assert.match(codemagic, /ios-ui-tests-phone/, 'Codemagic must retain the phone result bundle')
+assert.match(codemagic, /PHONE_UI_TEST_STATUS=\$\{PIPESTATUS\[0\]\}/, 'Codemagic must fail when the phone UI test fails')
 assert.match(githubWorkflow, /PlistBuddy/, 'macOS CI must verify generated app metadata')
 assert.match(githubWorkflow, /Print :CFBundleIdentifier/, 'macOS CI must verify the stable bundle identifier')
 assert.match(githubWorkflow, /com\.ieltsist\.stemist/, 'macOS CI must check the expected bundle identifier value')

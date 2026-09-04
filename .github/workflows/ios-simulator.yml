@@ -137,6 +137,19 @@ jobs:
               raise SystemExit("No iPad Simulator device type is available")
           print(candidates[0])
           ')"
+          PHONE_DEVICE_TYPE="$(xcrun simctl list devicetypes -j | /usr/bin/python3 -c '
+          import json
+          import sys
+
+          device_types = json.load(sys.stdin)["devicetypes"]
+          candidates = [device["identifier"] for device in device_types if "iPhone" in device["name"]]
+          if not candidates:
+              raise SystemExit("No iPhone Simulator device type is available")
+          preferred = [device["identifier"] for device in device_types if any(
+              model in device["name"] for model in ("iPhone 16", "iPhone 15", "iPhone 14")
+          )]
+          print(preferred[0] if preferred else candidates[-1])
+          ')"
           RUNTIME="$(xcrun simctl list runtimes -j | /usr/bin/python3 -c '
           import json
           import sys
@@ -151,8 +164,12 @@ jobs:
           print(runtimes[0]["identifier"])
           ')"
           SIMULATOR_UDID="$(xcrun simctl create "Stemist QA iPad" "$DEVICE_TYPE" "$RUNTIME")"
+          PHONE_SIMULATOR_UDID=""
           cleanup() {
             xcrun simctl delete "$SIMULATOR_UDID" >/dev/null 2>&1 || true
+            if [ -n "$PHONE_SIMULATOR_UDID" ]; then
+              xcrun simctl delete "$PHONE_SIMULATOR_UDID" >/dev/null 2>&1 || true
+            fi
           }
           trap cleanup EXIT
           xcrun simctl boot "$SIMULATOR_UDID"
@@ -198,8 +215,27 @@ jobs:
             2>&1 | tee "$GITHUB_WORKSPACE/build/ios-qa/qa-shell-ui-tests.log"
           QA_UI_TEST_STATUS=${PIPESTATUS[0]}
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/screenshots/qa-final.png" || true
+          PHONE_SIMULATOR_UDID="$(xcrun simctl create "Stemist QA iPhone" "$PHONE_DEVICE_TYPE" "$RUNTIME")"
+          xcrun simctl boot "$PHONE_SIMULATOR_UDID"
+          xcrun simctl bootstatus "$PHONE_SIMULATOR_UDID" -b
+          mkdir -p "$GITHUB_WORKSPACE/build/ios-ui-tests-phone"
+          xcodebuild test \
+            -project "$GITHUB_WORKSPACE/StemistUITests.xcodeproj" \
+            -scheme StemistShellUITests \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$PHONE_SIMULATOR_UDID" \
+            -derivedDataPath "$GITHUB_WORKSPACE/build/ios-ui-tests-phone" \
+            -resultBundlePath "$GITHUB_WORKSPACE/build/ios-ui-tests-phone/StemistStudentPhoneShell.xcresult" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            STEMIST_FULL_FEATURE_TEST=NO \
+            -only-testing:StemistShellUITests/StemistShellUITests/testStudentBuildPhoneShellOpensAndClosesIELTSRoute \
+            2>&1 | tee "$GITHUB_WORKSPACE/build/ios/student-phone-shell-ui-tests.log"
+          PHONE_UI_TEST_STATUS=${PIPESTATUS[0]}
+          xcrun simctl io "$PHONE_SIMULATOR_UDID" screenshot "$GITHUB_WORKSPACE/build/screenshots/student-phone-final.png" || true
           set -e
-          if [ "$STUDENT_UI_TEST_STATUS" -ne 0 ] || [ "$QA_UI_TEST_STATUS" -ne 0 ]; then
+          if [ "$STUDENT_UI_TEST_STATUS" -ne 0 ] || [ "$QA_UI_TEST_STATUS" -ne 0 ] || [ "$PHONE_UI_TEST_STATUS" -ne 0 ]; then
             UI_TEST_STATUS=1
           fi
           exit "$UI_TEST_STATUS"
@@ -214,9 +250,11 @@ jobs:
             build/ios/Build/Products/Debug-iphonesimulator/*.app
             build/ios/xcodebuild.log
             build/ios/student-shell-ui-tests.log
+            build/ios/student-phone-shell-ui-tests.log
             build/ios-qa/Build/Products/Debug-iphonesimulator/*.app
             build/ios-qa/xcodebuild.log
             build/ios-qa/qa-shell-ui-tests.log
             build/ios-ui-tests-student/*.xcresult
             build/ios-ui-tests-qa/*.xcresult
+            build/ios-ui-tests-phone/*.xcresult
             build/screenshots/*.png
