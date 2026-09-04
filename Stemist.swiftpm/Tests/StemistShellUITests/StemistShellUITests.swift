@@ -323,13 +323,31 @@ final class StemistShellUITests: XCTestCase {
         if ["Today", "IELTS", "STEM", "Notebook", "Profile"].contains(visibleLabel) {
             // SwiftUI's iPad tab bar exports both the native tab button and
             // its accessibility proxy. The first match can be a non-hittable
-            // proxy, so choose the live native element instead.
+            // proxy, so choose the live native element instead. On iPhone,
+            // UIKit may omit the identifier attached to the Label inside
+            // .tabItem; fall back to the system TabBar's visible label while
+            // keeping the identifier query as the preferred path.
             let candidates = app.buttons.matching(
                 NSPredicate(format: "identifier == %@ AND label == %@", identifier, visibleLabel)
             )
-            return candidates.allElementsBoundByIndex.first(where: {
+            if let live = candidates.allElementsBoundByIndex.first(where: {
                 $0.exists && $0.isHittable
-            }) ?? candidates.firstMatch
+            }) {
+                return live
+            }
+
+            let labelCandidates = app.buttons.matching(
+                NSPredicate(format: "label == %@", visibleLabel)
+            )
+            if let live = labelCandidates.allElementsBoundByIndex.first(where: {
+                $0.exists && $0.isHittable
+            }) {
+                return live
+            }
+
+            return app.buttons.matching(
+                NSPredicate(format: "label == %@", visibleLabel)
+            ).firstMatch
         }
 
         return app.buttons
